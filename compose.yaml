@@ -1,0 +1,19 @@
+# Author: Nicola Antonello
+#
+# Postgres 18 with pgvector for local work and integration tests (ADR-0004). It holds only
+# what one command rebuilds, and it listens on localhost only.
+services:
+  db:
+    image: pgvector/pgvector@sha256:5895949dfcdf308eb0cd31c950c93c14895c77f33fbedfecf1fa511ab1d4bcd2 # 0.8.7-pg18-trixie
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env, as in .env.example}
+    ports:
+      # Host port 5433, so it can run beside another Postgres on the default port.
+      - "127.0.0.1:5433:5432"
+    healthcheck:
+      # Over TCP, as the tests connect: on first start the image runs a setup server that
+      # listens only on its socket, and a socket check would call that ready.
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U postgres"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
