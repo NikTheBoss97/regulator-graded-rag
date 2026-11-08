@@ -1,0 +1,35 @@
+# Author: Nicola Antonello
+
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+build/
+dist/
+*.egg-info/
+.coverage
+htmlcov/
+.ipynb_checkpoints/
+
+# Corpus files, parsed output and indexes: rebuilt from the manifest, and often
+# not ours to redistribute
+corpus/raw/
+corpus/parsed/
+indexes/
+
+# Held-out questions stay local until the final report; only their checksum is
+# committed before then
+eval/heldout/
+
+# Personal study list of academic sources, kept local
+docs/THEORY.md

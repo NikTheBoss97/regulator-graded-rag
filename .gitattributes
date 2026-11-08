@@ -1,0 +1,6 @@
+# Author: Nicola Antonello
+
+# Force LF everywhere. Automation runs on Linux in CI and in containers, where a
+# CRLF checkout from Windows breaks shebangs and changes the checksums that pin
+# the corpus manifest and the gold set.
+* text=auto eol=lf
