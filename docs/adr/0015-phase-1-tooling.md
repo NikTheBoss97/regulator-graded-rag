@@ -68,6 +68,17 @@ How the gate tools are installed:
 - Unverified: how long mypy takes on this codebase, and how the image-based gates handle
   Windows paths. Phase 1 measures both.
 
+## Amendments
+
+- 2026-11-08: Phase 1 measured both on the Windows laptop. mypy checks the seven source
+  files in about two seconds from a cold cache, and all ten gates run in about twelve
+  seconds. The image-based gates mount the repository by its Windows path, which
+  contains a space, without trouble. They cannot work in a linked git worktree, whose
+  `.git` file names a host path that does not exist in the container: there gitleaks
+  scanned nothing and still passed. The gates now first check that git in the container
+  can read the repository, and fail when it cannot, so they run from the main checkout.
+  The Mac is not measured yet.
+
 ## References
 
 - mypy, [documentation](https://mypy.readthedocs.io/en/stable/).
