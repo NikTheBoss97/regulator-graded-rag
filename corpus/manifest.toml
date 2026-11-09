@@ -78,3 +78,9 @@ url = "https://www.govinfo.gov/content/pkg/CFR-2025-title49-vol3/xml/CFR-2025-ti
 size = 353834
 sha256 = "ad7b1af30aa908c5a35d141e1e5ef8c111b004b4c82ca65d735daafb50fe2ffc"
 licence = "public domain (17 U.S.C. 105)"
+
+# What the passage builder makes from these files (ADR-0017). A change to either value is
+# a new corpus version, so every run record names the version it used.
+[passages]
+count = 13539
+version = "67483c7d2861bfa6563f236bd3ceb7ad3f4fb4a062a1545fdedee63c56d579e7"
