@@ -126,7 +126,7 @@ Three boundaries keep the system testable:
 ### Corpus and passages
 
 The corpus is Parts 171–180 of the 2025 annual edition on GovInfo, revised as of
-1 October 2025: ten XML files, 10.3 MB and 712,618 words
+1 October 2025: ten XML files, 9.3 MB and 712,618 words
 ([ADR-0006](adr/0006-xml-corpus-and-section-passages.md)). The edition stays fixed for
 the whole project, and the demo tells users which date its rules are from.
 
@@ -139,8 +139,9 @@ the whole project, and the demo tells users which date its rules are from.
 - **Passages.** Paragraphs are merged in reading order up to about 250 words, and a
   passage never crosses a section. A paragraph over the limit is split at sentence ends.
   Each table row is its own passage, carrying its table's column headers. Each passage
-  starts with its section number and heading, copied verbatim. A simulation on the
-  edition gives about 13,500 passages: about 10,300 table rows and 3,200 text passages.
+  starts with its section number and heading, copied verbatim. The builder gives 13,539
+  passages: 10,336 table rows and 3,203 text passages, 31 of them a heading alone
+  ([ADR-0017](adr/0017-passage-text-from-the-xml.md)).
 - **IDs and versions.** A passage's ID is its section number and its position in the
   section, such as `173.306:4`, and a rebuild gives the same IDs. The corpus version is
   a checksum over every passage's ID and text.
@@ -151,15 +152,22 @@ The hard parts are known from counts on the edition:
   parts there are 215 tables with 10,350 rows.
 - §172.102, the special provisions: 25,576 words, including one nested block of 14,341
   words that the builder splits at its nested paragraphs.
+- §173.435 and §173.436, the A₁ and A₂ values: the exponents are superscripts, so text
+  that drops them misreads every value; passages mark them with `^`
+  ([ADR-0017](adr/0017-passage-text-from-the-xml.md)).
 - 125 images, including the hazard labels from §172.411 on and the package markings in
-  §§172.312–172.332, plus 15 in §173.62 not yet inspected. A text-only system should
+  §§172.312–172.332, and the 15 in §173.62, which hold its table of packing methods, so
+  the packing methods for explosives exist only as images. A text-only system should
   decline a question that needs one.
 
 The parse checks gate phase 1:
 
 - Apart from the heading and column headers that each passage repeats, every word of
-  each section lands in exactly one passage.
-- Every table row becomes exactly one passage.
+  each section's rule text lands in exactly one passage, in order; the amendment
+  citations and editorial notes are left out
+  ([ADR-0017](adr/0017-passage-text-from-the-xml.md)).
+- Every table row with text becomes exactly one passage; the three rows of column
+  numbers label the columns instead.
 - The owner compares a sample of the hardest passages with the official PDF pages: rows
   of §172.101, §172.102, §173.62 and §173.435.
 
