@@ -85,6 +85,10 @@ filters, so a docs-only change cannot skip a check.
 
 - 2026-11-08: ADR-0015 chose mypy as the type checker, decided how the gate tools are
   installed, and allowed only the `Refs:` trailer.
+- 2026-11-09: Two commits, not one, went straight to `main` before the ruleset existed:
+  the `.gitignore`, `.gitattributes` and licence, then the design. After ADR-0016's
+  rewrite, the same history went straight to the recreated repository's `main` once
+  more, before its ruleset was applied again.
 
 ## References
 

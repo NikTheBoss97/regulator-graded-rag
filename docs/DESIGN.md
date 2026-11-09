@@ -429,8 +429,10 @@ The repository, CI and security rules are in
   arrive weekly after a 7-day cooldown that security updates skip.
 - **Repository.** `regulator-graded-rag`, public, under Apache-2.0. A ruleset protects
   `main`: pull requests only, required checks, linear history and rebase merges, with
-  merged branches deleted. The first commit is the one change that goes straight to
-  `main`, before the ruleset exists.
+  merged branches deleted. Only the first commits went straight to `main`, before the
+  ruleset existed ([ADR-0013](adr/0013-repository-ci-and-security.md)). Commits name
+  the owner's GitHub no-reply address, never a personal one
+  ([ADR-0016](adr/0016-commits-use-github-no-reply-email.md)).
 
 ## Security
 
@@ -509,3 +511,4 @@ Each is made when its phase starts, with options and an ADR:
 - [ADR-0013: The repository, CI and security](adr/0013-repository-ci-and-security.md)
 - [ADR-0014: When the held-out split runs](adr/0014-when-the-held-out-split-runs.md)
 - [ADR-0015: Phase 1 tooling: Python 3.14, mypy and pinned gate tools](adr/0015-phase-1-tooling.md)
+- [ADR-0016: Commits use GitHub's no-reply email](adr/0016-commits-use-github-no-reply-email.md)

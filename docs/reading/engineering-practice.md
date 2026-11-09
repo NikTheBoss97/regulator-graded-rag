@@ -2,7 +2,7 @@
 
 # Engineering practice
 
-Recording decisions, tests, CI and dependencies. Part of the [reading list](README.md).
+Recording decisions, tests, CI, dependencies and personal data in the history. Part of the [reading list](README.md).
 
 ## Recording decisions
 
@@ -22,3 +22,8 @@ Recording decisions, tests, CI and dependencies. Part of the [reading list](READ
 - [gitleaks](https://github.com/gitleaks/gitleaks) (GitHub). Scans a git repository for secrets.
 - [actionlint](https://github.com/rhysd/actionlint) (GitHub). A static checker for GitHub Actions workflow files.
 - Davide Spadini, Maurício Aniche, Magiel Bruntink and Alberto Bacchelli, [To Mock or Not To Mock? An Empirical Study on Mocking Practices](https://doi.org/10.1109/MSR.2017.61) (MSR, 2017). An empirical study of which dependencies developers mock in their tests, and why.
+
+## Personal data in the history
+
+- GitHub, [Removing sensitive data from a repository](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/removing-sensitive-data-from-a-repository) (GitHub Docs). Why a rewrite and a force-push are not enough: pull request refs and cached views keep the old commits until GitHub Support removes them.
+- GitHub, [Blocking command line pushes that expose your personal email address](https://docs.github.com/en/account-and-profile/setting-up-and-managing-your-personal-account-on-github/managing-email-preferences/blocking-command-line-pushes-that-expose-your-personal-email-address) (GitHub Docs). The account setting that rejects a push whose newest commit names a private email.
