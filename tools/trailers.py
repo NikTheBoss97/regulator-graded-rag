@@ -1,7 +1,9 @@
 # Author: Nicola Antonello
-"""Reject commit trailers other than Refs:, and co-author or "Generated with" lines.
+"""Check commits: only Refs: trailers, no attribution lines, only no-reply emails.
 
-Only Refs: may end a commit message, so no tool can add its own lines to the history.
+Only Refs: may end a commit message, so no tool can add its own lines to the history,
+and only GitHub no-reply addresses may name an author or committer, so no personal
+email reaches the public history (ADR-0016).
 Usage: python -m tools.trailers [--base REV]. Exit code 0 when every commit is clean,
 1 when one has a problem, 2 when the base is not a commit in this clone.
 """
@@ -14,6 +16,8 @@ from collections.abc import Sequence
 
 ALLOWED_TRAILERS: frozenset[str] = frozenset({"Refs"})
 ZERO_SHA = "0" * 40
+NO_REPLY_SUFFIX = "@users.noreply.github.com"
+GITHUB_NO_REPLY = "noreply@github.com"
 _CO_AUTHOR = re.compile(r"^co-authored-by:", re.IGNORECASE | re.MULTILINE)
 _GENERATED_WITH = re.compile(r"^\W*generated with", re.IGNORECASE | re.MULTILINE)
 
@@ -48,6 +52,16 @@ def message_problems(message: str) -> list[str]:
     return problems
 
 
+def email_problems(author: str, committer: str) -> list[str]:
+    """One string per role whose email is not a GitHub no-reply address."""
+    # The problem names the role, never the address, because CI logs are public.
+    return [
+        f"{role} email is not a GitHub no-reply address"
+        for role, email in (("author", author), ("committer", committer))
+        if not (email.endswith(NO_REPLY_SUFFIX) or email == GITHUB_NO_REPLY)
+    ]
+
+
 def commits_to_check(base: str | None, head: str = "HEAD") -> list[str]:
     """Commits in base..head, oldest first and without merges; all of them for no base."""
     if base is None or base == ZERO_SHA:
@@ -64,7 +78,7 @@ def commits_to_check(base: str | None, head: str = "HEAD") -> list[str]:
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="python -m tools.trailers",
-        description="Reject commit trailers other than Refs:.",
+        description="Reject trailers other than Refs: and emails that are not no-reply.",
     )
     parser.add_argument(
         "--base",
@@ -79,7 +93,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 2
     problems = 0
     for sha in commits:
+        author, committer = _git("log", "-1", "--format=%ae%n%ce", sha).splitlines()
         found = message_problems(_git("log", "-1", "--format=%B", sha))
+        found += email_problems(author, committer)
         if found:
             subject = _git("log", "-1", "--format=%s", sha).strip()
             short = _git("rev-parse", "--short", sha).strip()

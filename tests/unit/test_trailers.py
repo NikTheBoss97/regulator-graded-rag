@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from tools.trailers import main, message_problems
+from tools.trailers import email_problems, main, message_problems
 
 
 @pytest.fixture
@@ -28,7 +28,7 @@ def repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Callable[[str], str
                 "-c",
                 "user.name=Test",
                 "-c",
-                "user.email=test@example.com",
+                "user.email=1+test@users.noreply.github.com",
                 "commit",
                 "--allow-empty",
                 "-q",
@@ -108,6 +108,29 @@ def test_trailer_after_a_dashed_line_is_rejected() -> None:
     assert message_problems(message) == ['trailer "Signed-off-by" is not allowed']
 
 
+def test_github_no_reply_emails_are_allowed() -> None:
+    assert email_problems("1+me@users.noreply.github.com", "noreply@github.com") == []
+
+
+def test_personal_author_email_is_rejected() -> None:
+    problems = email_problems("me@example.com", "noreply@github.com")
+    assert problems == ["author email is not a GitHub no-reply address"]
+
+
+def test_personal_committer_email_is_rejected() -> None:
+    problems = email_problems("1+me@users.noreply.github.com", "me@example.com")
+    assert problems == ["committer email is not a GitHub no-reply address"]
+
+
+def test_lookalike_no_reply_domains_are_rejected() -> None:
+    author = "me@users.noreply.github.com.example.com"
+    committer = "me@evilusers.noreply.github.com"
+    assert email_problems(author, committer) == [
+        "author email is not a GitHub no-reply address",
+        "committer email is not a GitHub no-reply address",
+    ]
+
+
 def test_main_reports_only_offending_commits(
     repo: Callable[[str], str], capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -145,3 +168,18 @@ def test_main_says_how_many_commits_it_checked(
     repo("docs: three\n")
     assert main(["--base", base]) == 0
     assert "2 commit(s) checked" in capsys.readouterr().out
+
+
+def test_main_reports_a_personal_email_without_printing_it(
+    repo: Callable[[str], str],
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # CI logs are public, so the problem names the role and never the address.
+    base = repo("chore: one\n")
+    monkeypatch.setenv("GIT_AUTHOR_EMAIL", "me@example.com")
+    repo("feat: two\n")
+    assert main(["--base", base]) == 1
+    out = capsys.readouterr().out
+    assert "feat: two: author email is not a GitHub no-reply address" in out
+    assert "me@example.com" not in out
