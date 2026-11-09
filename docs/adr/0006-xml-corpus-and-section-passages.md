@@ -79,6 +79,10 @@ shows the generator and cites. Whole sections cannot be that unit, because of th
   check, a section's words are its rule text: the amendment citations and editorial
   notes the publisher appends are left out. Every table row with text becomes one
   passage; the three rows of column numbers label the columns instead.
+- 2026-11-09: Measured by the passage builder. The ten files hold 9,266,626 bytes, not
+  10.3 MB; the 712,618 words are unchanged. The builder gives 13,539 passages, 10,336 of
+  them table rows. The 15 images in §173.62 are its table of packing methods. §172.101
+  holds six tables with 6,386 rows.
 
 ## References
 
