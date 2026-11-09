@@ -15,4 +15,5 @@ trustworthy. Part of the [reading list](README.md).
 
 - Hugging Face, [Pickle Scanning](https://huggingface.co/docs/hub/security-pickle) (Hugging Face documentation). Why loading a pickle file can run arbitrary code, and how the Hub scans for it.
 - Hugging Face, [Safetensors](https://huggingface.co/docs/safetensors/index) (Hugging Face documentation). A simple format for storing tensors safely, unlike pickle, so loading weights runs no code.
+- Python, [XML Processing Modules](https://docs.python.org/3.14/library/xml.html) (Python documentation), section "XML security". Expat before 2.7.2 may be open to entity-expansion and large-token attacks, so a test pins the minimum version the passage builder parses with.
 - Wei Zou, Runpeng Geng, Binghui Wang and Jinyuan Jia, [PoisonedRAG: Knowledge Corruption Attacks to Retrieval-Augmented Generation of Large Language Models](https://www.usenix.org/conference/usenixsecurity25/presentation/zou-poisonedrag) (USENIX Security, 2025). Attacks that plant malicious texts in the knowledge database. Why the corpus is pinned by checksums.

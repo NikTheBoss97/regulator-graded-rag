@@ -73,6 +73,13 @@ shows the generator and cites. Whole sections cannot be that unit, because of th
 - The 2026 edition was not available on 2026-11-06. A newer edition would be a new
   corpus version, with every run redone.
 
+## Amendments
+
+- 2026-11-09: ADR-0017 defines how the XML becomes passage text. For the conservation
+  check, a section's words are its rule text: the amendment citations and editorial
+  notes the publisher appends are left out. Every table row with text becomes one
+  passage; the three rows of column numbers label the columns instead.
+
 ## References
 
 - GovInfo, [Code of Federal Regulations](https://www.govinfo.gov/app/collection/cfr).

@@ -512,3 +512,4 @@ Each is made when its phase starts, with options and an ADR:
 - [ADR-0014: When the held-out split runs](adr/0014-when-the-held-out-split-runs.md)
 - [ADR-0015: Phase 1 tooling: Python 3.14, mypy and pinned gate tools](adr/0015-phase-1-tooling.md)
 - [ADR-0016: Commits use GitHub's no-reply email](adr/0016-commits-use-github-no-reply-email.md)
+- [ADR-0017: Passage text from the XML](adr/0017-passage-text-from-the-xml.md)
