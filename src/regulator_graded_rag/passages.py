@@ -5,17 +5,40 @@ A text passage holds whole paragraphs of one unit, at most LIMIT words, after th
 heading; a longer paragraph splits at sentence ends. The publisher's amendment citations
 and editorial notes are left out, and their words counted. An element the builder does
 not know stops the build, so no text is dropped silently.
+
+Usage: python -m regulator_graded_rag.passages [--manifest PATH] [--raw DIR] [--out PATH],
+from the repository root. It builds the fetched corpus, runs the parse checks, writes
+corpus/parsed/passages.jsonl when they pass, and compares the passage count and corpus
+version with the manifest's. Exit code 0 when the checks pass and the build matches the
+manifest or the manifest records none yet, 1 otherwise.
 """
 
+import argparse
+import hashlib
+import io
+import json
 import re
+import sys
+import time
 import xml.etree.ElementTree as ET
 from collections import Counter
-from collections.abc import Iterable, Iterator
+from collections.abc import Iterable, Iterator, Sequence
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Literal
 
+from regulator_graded_rag.manifest import (
+    DEFAULT_MANIFEST,
+    DEFAULT_RAW,
+    CorpusFile,
+    Manifest,
+    check_bytes,
+    load_manifest,
+)
 from regulator_graded_rag.tables import read_table
 from regulator_graded_rag.xml_text import UnknownElement, normalize, render_inline
+
+DEFAULT_OUT = Path("corpus/parsed/passages.jsonl")
 
 LIMIT = 250
 APPARATUS = frozenset({"CITA", "EDNOTE"})
@@ -340,3 +363,121 @@ def build_file(source: str, data: bytes) -> FileBuild:
 
     visit(root, 0)
     return FileBuild(source, tuple(units), walk.counts, tuple(walk.findings))
+
+
+def _verified_bytes(entry: CorpusFile, raw: Path) -> bytes:
+    """The file's bytes, once they match the manifest; a file is parsed only then."""
+    path = raw / entry.name
+    if not path.is_file():
+        problem = "missing"
+    else:
+        data = path.read_bytes()
+        if (problem_found := check_bytes(entry, data)) is None:
+            return data
+        problem = problem_found
+    raise ValueError(
+        f'{entry.name}: {problem}: run "uv run python -m regulator_graded_rag.fetch"'
+    )
+
+
+def _builds(manifest: Manifest, raw: Path) -> Iterator[FileBuild]:
+    for entry in manifest.files:
+        yield build_file(entry.name, _verified_bytes(entry, raw))
+
+
+def build_corpus(manifest: Manifest, raw: Path) -> list[FileBuild]:
+    """Every file, in manifest order, never directory order."""
+    return list(_builds(manifest, raw))
+
+
+def version_of(pairs: Iterable[tuple[str, str]]) -> str:
+    """The SHA-256 of one JSON line [id, text] per passage, in order, in UTF-8."""
+    digest = hashlib.sha256()
+    for id_, text in pairs:
+        line = json.dumps([id_, text], ensure_ascii=False) + "\n"
+        digest.update(line.encode("utf-8"))
+    return digest.hexdigest()
+
+
+def corpus_version(passages: Iterable[Passage]) -> str:
+    """Changes exactly when a passage's ID or text changes, or the order does."""
+    return version_of((p.id, p.text) for p in passages)
+
+
+def write_passages(path: Path, passages: Iterable[Passage]) -> None:
+    """One JSON object per line, with LF line endings on every system."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8", newline="\n") as out:
+        for p in passages:
+            record = {
+                "id": p.id,
+                "kind": p.kind,
+                "source": p.source,
+                "page": p.page,
+                "text": p.text,
+            }
+            out.write(json.dumps(record, ensure_ascii=False) + "\n")
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    # Imported here: the checks import this module's types.
+    from regulator_graded_rag.parse_checks import check_build
+
+    # Windows encodes a piped stdout as cp1252: escape what it cannot show, so a failure
+    # still prints its message.
+    if isinstance(sys.stdout, io.TextIOWrapper):
+        sys.stdout.reconfigure(errors="backslashreplace")
+
+    parser = argparse.ArgumentParser(
+        prog="python -m regulator_graded_rag.passages",
+        description="Build the passages, check them against the XML and write them.",
+    )
+    parser.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST)
+    parser.add_argument("--raw", type=Path, default=DEFAULT_RAW)
+    parser.add_argument("--out", type=Path, default=DEFAULT_OUT)
+    args = parser.parse_args(argv)
+    manifest = load_manifest(args.manifest)
+    builds: list[FileBuild] = []
+    total = len(manifest.files)
+    try:
+        for i, build in enumerate(_builds(manifest, args.raw), start=1):
+            builds.append(build)
+            count = sum(len(u.passages) for u in build.units)
+            stamp = time.strftime("%H:%M:%S")
+            print(f"[{i}/{total} {stamp}] {build.source}: {count} passages", flush=True)
+    except ValueError as err:
+        print(f"FAILED: {err}")
+        return 1
+    counts = sum((b.counts for b in builds), Counter[str]())
+    for key in COUNT_KEYS:
+        print(f"{key}: {counts[key]}")
+    for finding in (f for b in builds for f in b.findings):
+        print(finding)
+    passages = [p for b in builds for u in b.units for p in u.passages]
+    version = corpus_version(passages)
+    print(f"passages: {len(passages)}, corpus version {version}")
+    if problems := check_build(builds):
+        for problem in problems:
+            print(problem)
+        print(f"{len(problems)} problem(s): nothing written")
+        return 1
+    write_passages(args.out, passages)
+    if manifest.passages is None or manifest.version is None:
+        print("not recorded in the manifest yet")
+        return 0
+    if (len(passages), version) == (manifest.passages, manifest.version):
+        print("matches the manifest")
+        return 0
+    print(
+        f"differs from the manifest (count {manifest.passages},"
+        f" version {manifest.version})"
+    )
+    return 1
+
+
+if __name__ == "__main__":
+    # python -m runs this file as __main__, a second copy of the module. Run the package's
+    # copy instead, so the build hands the checks the same types they import.
+    from regulator_graded_rag.passages import main as run
+
+    raise SystemExit(run())
