@@ -1,8 +1,9 @@
 # Author: Nicola Antonello
 #
 # The checks every pull request and every push to main must pass (ADR-0013, ADR-0015).
-# The checks job runs the same command a developer runs. The tests job runs the
-# integration tests against the same Postgres image as compose.yaml.
+# The checks job runs the same command a developer runs. The tests job fetches the
+# corpus from GovInfo, checked by SHA-256, and runs the integration tests against the
+# same Postgres image as compose.yaml.
 name: ci
 
 on:
@@ -61,4 +62,5 @@ jobs:
           version: "0.12.17"
           enable-cache: false
       - run: uv sync --locked
+      - run: uv run python -m regulator_graded_rag.fetch
       - run: uv run pytest tests/integration -q

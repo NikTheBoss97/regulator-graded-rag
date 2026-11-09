@@ -1,10 +1,40 @@
 # Author: Nicola Antonello
 import os
 from collections.abc import Iterator
+from pathlib import Path
 from typing import Any
 
 import psycopg
 import pytest
+
+from regulator_graded_rag.manifest import Manifest, check_bytes, load_manifest
+
+REPO = Path(__file__).resolve().parents[2]
+
+
+@pytest.fixture(scope="session")
+def manifest() -> Manifest:
+    """The committed corpus manifest."""
+    return load_manifest(REPO / "corpus" / "manifest.toml")
+
+
+@pytest.fixture(scope="session")
+def corpus_dir(manifest: Manifest) -> Path:
+    """corpus/raw/, once every file the manifest names is there with its bytes.
+
+    A missing or changed file fails the test with the command that fetches it, never a
+    skip, for the same reason as the database below.
+    """
+    raw = REPO / "corpus" / "raw"
+    for entry in manifest.files:
+        path = raw / entry.name
+        problem = check_bytes(entry, path.read_bytes()) if path.is_file() else "missing"
+        if problem:
+            pytest.fail(
+                f'{entry.name}: {problem}: run "uv run python -m regulator_graded_rag.fetch"',
+                pytrace=False,
+            )
+    return raw
 
 
 @pytest.fixture
