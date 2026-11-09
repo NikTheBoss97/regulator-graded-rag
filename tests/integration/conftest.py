@@ -8,6 +8,7 @@ import psycopg
 import pytest
 
 from regulator_graded_rag.manifest import Manifest, check_bytes, load_manifest
+from regulator_graded_rag.passages import FileBuild, build_corpus
 
 REPO = Path(__file__).resolve().parents[2]
 
@@ -35,6 +36,12 @@ def corpus_dir(manifest: Manifest) -> Path:
                 pytrace=False,
             )
     return raw
+
+
+@pytest.fixture(scope="session")
+def corpus_build(manifest: Manifest, corpus_dir: Path) -> list[FileBuild]:
+    """The whole corpus, built once per test session."""
+    return build_corpus(manifest, corpus_dir)
 
 
 @pytest.fixture
