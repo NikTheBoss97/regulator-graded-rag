@@ -1,0 +1,80 @@
+# Author: Nicola Antonello
+#
+# The corpus: Parts 171-180 of Title 49 of the Code of Federal Regulations, the annual
+# edition revised as of 1 October 2025, as published by GovInfo (ADR-0006). The command
+# "uv run python -m regulator_graded_rag.fetch" downloads each file into corpus/raw/ and
+# keeps it only when its size and SHA-256 match. GovInfo's Public Domain & Copyright
+# Notice cites 17 U.S.C. 105: works of the US Government are not under copyright.
+
+edition = "2025"
+revised = "2025-10-01"
+
+[[files]]
+name = "CFR-2025-title49-vol2-part171.xml"
+url = "https://www.govinfo.gov/content/pkg/CFR-2025-title49-vol2/xml/CFR-2025-title49-vol2-part171.xml"
+size = 295598
+sha256 = "f1106fa3e01e2dfaad5d77a33cbf82c15613afec71efd68fa244a7be64163105"
+licence = "public domain (17 U.S.C. 105)"
+
+[[files]]
+name = "CFR-2025-title49-vol2-part172.xml"
+url = "https://www.govinfo.gov/content/pkg/CFR-2025-title49-vol2/xml/CFR-2025-title49-vol2-part172.xml"
+size = 3355574
+sha256 = "922f8b11ab6c2e865e73032af710c940f1f11469a08be5c0a4148a6e5959c09e"
+licence = "public domain (17 U.S.C. 105)"
+
+[[files]]
+name = "CFR-2025-title49-vol2-part173.xml"
+url = "https://www.govinfo.gov/content/pkg/CFR-2025-title49-vol2/xml/CFR-2025-title49-vol2-part173.xml"
+size = 2615461
+sha256 = "9deca30b0795009e05fa3bcfa237a9b10312ac06bb1167eb7672107c0beb5d42"
+licence = "public domain (17 U.S.C. 105)"
+
+[[files]]
+name = "CFR-2025-title49-vol2-part174.xml"
+url = "https://www.govinfo.gov/content/pkg/CFR-2025-title49-vol2/xml/CFR-2025-title49-vol2-part174.xml"
+size = 168842
+sha256 = "1052e1c89de72e1061c3ab9aec80e113a1cb4db006bcc53e2c2ea5aaaeadbb3c"
+licence = "public domain (17 U.S.C. 105)"
+
+[[files]]
+name = "CFR-2025-title49-vol2-part175.xml"
+url = "https://www.govinfo.gov/content/pkg/CFR-2025-title49-vol2/xml/CFR-2025-title49-vol2-part175.xml"
+size = 132849
+sha256 = "d63a01a8375a96d092c14b85ca8c8c939cfc8ba7fd917dc2875c33bac511dcc8"
+licence = "public domain (17 U.S.C. 105)"
+
+[[files]]
+name = "CFR-2025-title49-vol2-part176.xml"
+url = "https://www.govinfo.gov/content/pkg/CFR-2025-title49-vol2/xml/CFR-2025-title49-vol2-part176.xml"
+size = 395538
+sha256 = "645927041197a3cf08930d3fdbd12f9385f8ea828346868847d3a696b2a8db6f"
+licence = "public domain (17 U.S.C. 105)"
+
+[[files]]
+name = "CFR-2025-title49-vol2-part177.xml"
+url = "https://www.govinfo.gov/content/pkg/CFR-2025-title49-vol2/xml/CFR-2025-title49-vol2-part177.xml"
+size = 146833
+sha256 = "a5cf862184ea2e3d0ccf3f14b15c03007d4bf343e8bef1dc86326e4b29d58275"
+licence = "public domain (17 U.S.C. 105)"
+
+[[files]]
+name = "CFR-2025-title49-vol3-part178.xml"
+url = "https://www.govinfo.gov/content/pkg/CFR-2025-title49-vol3/xml/CFR-2025-title49-vol3-part178.xml"
+size = 1399042
+sha256 = "85b86f871c6d223b03c3d9b6bfd5c1d4d2ba3837260fb6a0c20ce1b478468eff"
+licence = "public domain (17 U.S.C. 105)"
+
+[[files]]
+name = "CFR-2025-title49-vol3-part179.xml"
+url = "https://www.govinfo.gov/content/pkg/CFR-2025-title49-vol3/xml/CFR-2025-title49-vol3-part179.xml"
+size = 403055
+sha256 = "99f50013bcff9644435365acdbda5b67a124ec3d635496f3134016baa6796607"
+licence = "public domain (17 U.S.C. 105)"
+
+[[files]]
+name = "CFR-2025-title49-vol3-part180.xml"
+url = "https://www.govinfo.gov/content/pkg/CFR-2025-title49-vol3/xml/CFR-2025-title49-vol3-part180.xml"
+size = 353834
+sha256 = "ad7b1af30aa908c5a35d141e1e5ef8c111b004b4c82ca65d735daafb50fe2ffc"
+licence = "public domain (17 U.S.C. 105)"
