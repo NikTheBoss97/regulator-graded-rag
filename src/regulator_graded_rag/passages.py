@@ -14,6 +14,7 @@ from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, field
 from typing import Literal
 
+from regulator_graded_rag.tables import read_table
 from regulator_graded_rag.xml_text import UnknownElement, normalize, render_inline
 
 LIMIT = 250
@@ -147,15 +148,32 @@ class _UnitBuilder:
         # Paragraphs not yet in a passage, each with the page it starts on.
         self.pending: list[tuple[str, int]] = []
 
-    def add_text(self, body: tuple[str, ...], page: int) -> None:
+    def add(
+        self,
+        kind: Literal["text", "row"],
+        page: int,
+        body: tuple[str, ...],
+        caption: tuple[str, ...] = (),
+        labels: tuple[str, ...] = (),
+    ) -> None:
+        """Append the unit's next passage, numbered from 1 in reading order."""
         key = self.unit.key
         n = len(self.passages) + 1
+        heading = self.unit.heading
         self.passages.append(
             Passage(
-                f"{key}:{n}", key, "text", self.source, page, self.unit.heading, body
+                f"{key}:{n}",
+                key,
+                kind,
+                self.source,
+                page,
+                heading,
+                body,
+                caption,
+                labels,
             )
         )
-        self.walk.counts["text passages"] += 1
+        self.walk.counts[f"{kind} passages"] += 1
 
     def flush(self) -> None:
         """Merge the pending paragraphs into text passages."""
@@ -168,13 +186,53 @@ class _UnitBuilder:
             run = []
             self.walk.counts["long paragraphs"] += 1
             for group in _groups((s, page) for s in SENTENCE_END.split(text)):
-                self.add_text((" ".join(s for s, _ in group),), page)
+                self.add("text", page, (" ".join(s for s, _ in group),))
         self._add_groups(run)
         self.pending.clear()
 
     def _add_groups(self, paragraphs: list[tuple[str, int]]) -> None:
         for group in _groups(paragraphs):
-            self.add_text(tuple(text for text, _ in group), group[0][1])
+            self.add("text", group[0][1], tuple(text for text, _ in group))
+
+    def table(self, el: ET.Element, depth: int) -> None:
+        """One passage per row with text; the notes become text passages after them."""
+        self.flush()
+        try:
+            table, self.walk.page = read_table(el, depth, self.walk.page)
+        except ValueError as err:
+            raise type(err)(f"{err} in {self.unit.key}") from err
+        counts = self.walk.counts
+        counts["tables"] += 1
+        counts["rows"] += len(el.findall("ROW"))
+        counts["column-number rows"] += table.column_number_rows
+        counts["empty rows"] += table.empty_rows
+        for row in table.rows:
+            values = [(i, value) for i, value in enumerate(row.cells) if value]
+            labels = tuple(
+                table.labels[i] if i < len(table.labels) else "" for i, _ in values
+            )
+            body = tuple(value for _, value in values)
+            self.add("row", row.page, body, table.caption, labels)
+        self.pending.extend(table.notes)
+        self.flush()
+        # Labels the rows may misplace, reported for the comparison with the printed page.
+        key, labels = self.unit.key, table.labels
+        if el.find("BOXHD") is not None and len(labels) != table.columns:
+            self.walk.findings.append(
+                f"{key}: a table with {table.columns} columns has"
+                f" {len(labels)} column labels"
+            )
+        if len(set(labels)) < len(labels):
+            self.walk.findings.append(
+                f"{key}: a table has {len(labels)} column labels,"
+                f" {len(set(labels))} of them distinct"
+            )
+        for cell in el.iter("ENT"):
+            if "A" in cell.attrib:
+                self.walk.findings.append(
+                    f'{key}: a table cell carries A="{cell.attrib["A"]}",'
+                    " which the builder does not read"
+                )
 
     def render(self, el: ET.Element, depth: int) -> str:
         """el's normalized text; its page markers move the page on."""
@@ -208,7 +266,7 @@ class _UnitBuilder:
         elif tag == "PRTPAGE":
             self.walk.page = int(el.attrib["P"])
         elif tag == "GPOTABLE":
-            raise NotImplementedError(f"a table in {self.unit.key}")
+            self.table(el, depth)
         else:
             raise UnknownElement(f"<{tag}> in {self.unit.key}")
 
@@ -257,7 +315,7 @@ def _build_unit(
         builder.block(child, depth + 1)
     builder.flush()
     if not builder.passages:
-        builder.add_text((), walk.page)
+        builder.add("text", walk.page, ())
         walk.counts["heading-only units"] += 1
     return UnitBuild(unit, tuple(builder.passages))
 
