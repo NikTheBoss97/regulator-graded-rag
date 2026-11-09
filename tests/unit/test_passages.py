@@ -243,3 +243,81 @@ def test_an_unknown_element_in_a_section_number_names_its_file() -> None:
 def test_unknown_element_stops_the_build() -> None:
     with pytest.raises(UnknownElement, match="BLINK.*171.1"):
         build_file("t.xml", part(section("171.1", "S.", "<BLINK>x</BLINK>")))
+
+
+TABLE = (
+    '<GPOTABLE COLS="3"><TTITLE>Table 1—Codes</TTITLE>'
+    '<BOXHD><CHED H="1">Code</CHED><CHED H="1">Meaning</CHED><CHED H="1">Limit</CHED></BOXHD>'
+    '<ROW><ENT I="01">IB1</ENT><ENT>Metal</ENT><ENT/></ROW>'
+    '<ROW><ENT I="01">IB2</ENT><ENT>Plastic</ENT><ENT>5 L</ENT></ROW>'
+    "<TNOTE>Note to the table.</TNOTE></GPOTABLE>"
+)
+
+
+def test_each_row_becomes_a_passage_with_its_labels() -> None:
+    passages = passages_of(
+        part(
+            section(
+                "172.102",
+                "Special provisions.",
+                "<P>Before.</P>",
+                TABLE,
+                "<P>After.</P>",
+            )
+        )
+    )
+    assert [(p.id, p.kind, p.body) for p in passages] == [
+        ("172.102:1", "text", ("Before.",)),
+        ("172.102:2", "row", ("IB1", "Metal")),
+        ("172.102:3", "row", ("IB2", "Plastic", "5 L")),
+        ("172.102:4", "text", ("Note to the table.",)),
+        ("172.102:5", "text", ("After.",)),
+    ]
+    assert (
+        passages[1].text
+        == "§ 172.102 Special provisions.\nTable 1—Codes\nCode: IB1\nMeaning: Metal"
+    )
+    assert passages[2].labels == ("Code", "Meaning", "Limit")
+
+
+def test_values_beyond_the_labelled_columns_keep_no_label() -> None:
+    table = (
+        '<GPOTABLE COLS="3"><BOXHD><CHED H="1">Pressure</CHED><CHED H="1">Density</CHED></BOXHD>'
+        '<ROW><ENT I="01">17</ENT><ENT>52.8</ENT><ENT>6.60</ENT></ROW></GPOTABLE>'
+    )
+    build = build_file("t.xml", part(section("173.319", "S.", table)))
+    assert (
+        build.units[0].passages[0].text
+        == "§ 173.319 S.\nPressure: 17\nDensity: 52.8\n6.60"
+    )
+    assert build.findings == ("173.319: a table with 3 columns has 2 column labels",)
+
+
+def test_rows_are_counted() -> None:
+    counts = build_file("t.xml", part(section("172.102", "S.", TABLE))).counts
+    keys = ("tables", "rows", "row passages", "column-number rows", "empty rows")
+    assert [counts[k] for k in keys] == [1, 2, 2, 0, 0]
+
+
+def test_a_table_that_repeats_column_labels_is_reported() -> None:
+    table = (
+        '<GPOTABLE COLS="3"><BOXHD><CHED H="1">10 or less</CHED>'
+        '<CHED H="1">10 or less</CHED><CHED H="1">Over 10</CHED></BOXHD>'
+        '<ROW><ENT I="01">.100</ENT><ENT>.129</ENT><ENT>.157</ENT></ROW></GPOTABLE>'
+    )
+    build = build_file("t.xml", part(section("178.348-2", "S.", table)))
+    assert build.findings == (
+        "178.348-2: a table has 3 column labels, 2 of them distinct",
+    )
+
+
+def test_a_cell_that_may_span_columns_is_reported() -> None:
+    table = (
+        '<GPOTABLE COLS="2"><BOXHD><CHED H="1">Index</CHED><CHED H="1">Distance</CHED>'
+        '</BOXHD><ROW><ENT I="01">Sum</ENT><ENT A="25">Cargo thickness</ENT></ROW>'
+        "</GPOTABLE>"
+    )
+    build = build_file("t.xml", part(section("176.708", "S.", table)))
+    assert build.findings == (
+        '176.708: a table cell carries A="25", which the builder does not read',
+    )
