@@ -24,8 +24,12 @@ flowchart LR
   records --> table[README results table]
 ```
 
-Status: phase 1 (foundations) in progress. Nothing runs yet. This is not compliance or
-legal advice.
+Status: phase 1 (foundations) complete. The 2025 edition is fetched by checksum and
+split into 13,539 passages, which pass their parse checks. The owner compared 25 sampled
+passages with [the printed pages](corpus/parse-review.md): 20 match, and 5 differ only
+in that the page sets A₁ and A₂ as subscripts, which
+[ADR-0017](docs/adr/0017-passage-text-from-the-xml.md#amendments) keeps as plain text.
+Phase 2 (evaluation) is next. This is not compliance or legal advice.
 
 ## Results
 
@@ -46,6 +50,20 @@ hand, and its first row will be the BM25 baseline in phase 2.
   sections, and end-to-end, so a failure can be traced to a stage.
 - **Models:** a local open-weight model answers by default, and Claude Haiku, Sonnet and
   Opus answer the dev questions once as a comparison.
+
+## Quickstart
+
+Needs Python 3.14 with uv; the integration tests also need Docker.
+
+```bash
+uv sync --locked
+uv run python -m regulator_graded_rag.fetch
+uv run python -m regulator_graded_rag.passages
+uv run pytest tests/unit
+```
+
+The build writes the passages to `corpus/parsed/passages.jsonl` and checks that they give
+the passage count and corpus version the manifest records.
 
 ## Read more
 

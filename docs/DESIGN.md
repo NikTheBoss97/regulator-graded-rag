@@ -13,7 +13,8 @@ The decisions behind it, with the options each one rejected, are in
 [`docs/adr/`](adr/).
 
 Status: approved by the owner on 2026-11-08, after approving each section between
-2026-11-05 and 2026-11-08. Nothing is built yet.
+2026-11-05 and 2026-11-08. Phase 1 is built: the repository and its checks, the corpus
+fetch and the passage builder.
 
 ## Goals
 
