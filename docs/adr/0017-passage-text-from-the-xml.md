@@ -141,6 +141,41 @@ The parser:
   the data and checked against the printed page only for §173.435, and how reliably
   GovInfo answers CI's downloads.
 
+## Amendments
+
+- 2026-11-13: The owner compared 25 sampled passages with the printed pages
+  (`corpus/parse-review.md`). Where five rows of §173.435 read A1 and A2, the pages set
+  A₁ and A₂ as subscripts, which confirms that `E` with `T="52"` marks a subscript; the
+  section's heading tags the same two digits with `T="9145"` instead. Each of the 334
+  subscripts follows a letter, a bracket, a slash or another subscript, never a digit,
+  so none merges with a number before it. Joined to the letter before it, a subscript
+  reads like a number only in one formula of §173.24b, printed twice: `(12.74e0)` and
+  `(144.2e0)` mean 12.74 and 144.2 times e₀, which the lines below the formula define.
+  The source itself writes A1 and A2 untagged in §173.427 and §173.433, and LC50
+  untagged 30 times, and a marker such as `_` would be ambiguous, because the source
+  holds 853 underscores. The owner kept subscripts as plain text, with that formula as
+  the known exception. Plain A1 and A2 also spell special provisions A1 and A2, in 112
+  places of §172.101 and §172.102, and only the column label or the sentence tells them
+  apart.
+- 2026-11-13: Two of the owner's notes are answered by the source. The source tags all
+  16 cent signs of Part 172, such as the one after "Beryllium powder", with `T="51"`, so
+  passages write `^¢`; the owner was not sure the page prints that ¢ raised, so whether
+  `T="51"` always prints raised stays unverified. The three Ethylene cells of
+  §173.319's 17 psig row are empty in the source, so that passage has no line for them,
+  as decided.
+- 2026-11-13: The owner's note on the first row of §172.102's IB8 table ("These are
+  table headers") led to two tables whose sub-headers sit in a body row: the IB3 and IB8
+  tables, whose first row reads "Inner packagings:" and "Large outer packagings:". The
+  build does not report them, so eight tables, not the six above, have column labels
+  that can mislead.
+- 2026-11-13: The owner's notes show two consequences of these rules. A special
+  provision's code is the first word of its paragraph: the source separates it from the
+  text with an em space (U+2003) in 366 of the 375 paragraphs of §172.102 that start
+  with a code, and with a plain space in 9, and the whitespace rule turns both into a
+  space, so a passage reads "40 Polyester resin kits …" where the page sets the code
+  apart. A paragraph over 250 words splits at a sentence end, so its later passages
+  lose the code, as in special provision 340 (258 words).
+
 ## References
 
 - GPO, [Code of Federal Regulations XML Rendition: User Guide Document](https://www.govinfo.gov/bulkdata/CFR/resources/CFR-XML_User-Guide_v1.pdf) (2009).
