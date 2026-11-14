@@ -31,6 +31,10 @@ target-version = "py314"
 [tool.mypy]
 strict = true
 files = ["src", "tests", "tools"]
+# The test folders are not packages: name each test module by its path from the
+# repository root (tests.unit.x), so same-named files and imports between tests resolve.
+explicit_package_bases = true
+mypy_path = ["src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
