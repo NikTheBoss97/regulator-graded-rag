@@ -175,6 +175,19 @@ The parser:
   space, so a passage reads "40 Polyester resin kits …" where the page sets the code
   apart. A paragraph over 250 words splits at a sentence end, so its later passages
   lose the code, as in special provision 340 (258 words).
+- 2026-11-14: The two formulas for equivalent steel in §173.24b lost their cube root.
+  The source writes it as a bare fraction after a bracket,
+  `(Rm<E T="52">1</E> A<E T="52">1</E>)<FR>1/3</FR>`, and a fraction gets a space only
+  after a letter or a digit, so the passages read `(Rm1 A1)1/3`, one third of Rm1 A1.
+  The owner checked that the printed page raises the 1/3, and the section's own numbers
+  agree: 12.74 and 144.2 are the cube roots of 51.7 × 40 and 75,000 × 40, the tensile
+  strength of its reference steel, in daN/mm² and in psi, times its elongation. A
+  fraction right after a closing bracket now gets the superscript marker, so the
+  formulas read `e1 = (12.74e0) / (Rm1 A1)^1/3` and `e1 = (144.2e0) / (Rm1 A1)^1/3`.
+  They hold the only 2 of the corpus's 299 fractions that follow a closing bracket: the
+  build changed no other passage and gave a new corpus version. The owner chose this
+  over `^(1/3)`, whose brackets the parse checks would have to excuse, and over keeping
+  the text. The marker has no end, so `^1/3` is read whole, as `10^−1` is.
 
 ## References
 
