@@ -31,5 +31,10 @@ indexes/
 # committed before then
 eval/heldout/
 
+# Letters and eCFR pages, fetched by script and never committed; eval/heldout/ above
+# also holds every letter until the split
+eval/letters/
+eval/ecfr/
+
 # Personal study list of academic sources, kept local
 docs/THEORY.md
