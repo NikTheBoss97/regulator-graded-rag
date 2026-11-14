@@ -12,7 +12,8 @@ joining or splitting words.
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 
-# Marks raised text: "8.0 × 10^−1". The source never contains "^".
+# Marks raised text: "8.0 × 10^−1". The source never contains "^". A fraction right
+# after a closing bracket is raised too: the cube root in §173.24b, "(Rm1 A1)^1/3".
 SUPERSCRIPT = "^"
 INLINE = frozenset({"E", "SU", "FR", "LI", "PRTPAGE", "FTREF", "FL-2", "LDRFIG"})
 _RAISED_E = "51"
@@ -67,7 +68,11 @@ def render_inline(el: ET.Element, depth: int) -> Rendered:
         elif child.tag in INLINE:
             part = render_inline(child, depth + 1)
             pages.extend(part.pages)
-            if child.tag == "SU" or (child.tag == "E" and child.get("T") == _RAISED_E):
+            if (
+                child.tag == "SU"
+                or (child.tag == "E" and child.get("T") == _RAISED_E)
+                or (child.tag == "FR" and text[-1:] == ")")
+            ):
                 text += SUPERSCRIPT
             elif child.tag in _SPACE_BEFORE or (
                 child.tag == "FR" and text[-1:].isalnum()

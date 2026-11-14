@@ -76,6 +76,22 @@ def test_a_fraction_after_a_digit_gets_a_space() -> None:
     assert render_inline(p, depth=0).text == "border measuring 1/2-inch"
 
 
+def test_a_fraction_after_a_closing_bracket_is_an_exponent() -> None:
+    fp = el(
+        "<FP>",
+        "    / (Rm",
+        '    <E T="52">1</E>',
+        "     A",
+        '    <E T="52">1</E>',
+        "    )",
+        "    <FR>1/3</FR>",
+        "</FP>",
+    )
+    assert render_inline(fp, depth=0).text == "/ (Rm1 A1)^1/3"
+    p = el("<P>", "    6.35 mm (", "    <FR>1/4</FR>", "     in.) high", "</P>")
+    assert render_inline(p, depth=0).text == "6.35 mm (1/4 in.) high"
+
+
 def test_a_line_break_inside_a_cell_becomes_a_space() -> None:
     ched = el("<CHED>", "    Current OMB", "    <LI>control No.</LI>", "</CHED>")
     assert render_inline(ched, depth=0).text == "Current OMB control No."
