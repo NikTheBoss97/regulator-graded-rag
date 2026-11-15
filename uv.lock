@@ -311,22 +311,24 @@ wheels = [
 name = "regulator-graded-rag"
 version = "0.1.0"
 source = { editable = "." }
+dependencies = [
+    { name = "psycopg", extra = ["binary"] },
+]
 
 [package.dev-dependencies]
 dev = [
     { name = "mypy" },
-    { name = "psycopg", extra = ["binary"] },
     { name = "pytest" },
     { name = "ruff" },
     { name = "zizmor" },
 ]
 
 [package.metadata]
+requires-dist = [{ name = "psycopg", extras = ["binary"], specifier = "==3.3.6" }]
 
 [package.metadata.requires-dev]
 dev = [
     { name = "mypy", specifier = "==2.4.1" },
-    { name = "psycopg", extras = ["binary"], specifier = "==3.3.6" },
     { name = "pytest", specifier = "==9.2.0" },
     { name = "ruff", specifier = "==0.17.3" },
     { name = "zizmor", specifier = "==1.31.1" },
