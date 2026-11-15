@@ -14,7 +14,7 @@ The decisions behind it, with the options each one rejected, are in
 
 Status: approved by the owner on 2026-11-08, after approving each section between
 2026-11-05 and 2026-11-08. Phase 1 is built: the repository and its checks, the corpus
-fetch and the passage builder.
+fetch and the passage builder. Phase 2 has drawn the dev and held-out split.
 
 ## Goals
 
@@ -263,8 +263,9 @@ they became an experiment when the default generator changed.
 
 ### The gold set
 
-The questions come from PHMSA's interpretation letters dated 2017 to 2025: 871 letters,
-read from the Internet Archive's copies because PHMSA's site refuses scripts
+The questions come from PHMSA's interpretation letters from 2017 on: 903 letters with
+reference years 2017 to 2026, listed on 2026-11-14 and 2026-11-15 and read from the
+Internet Archive's copies because PHMSA's site refuses scripts
 ([ADR-0007](adr/0007-letter-items-and-drift-check.md)).
 
 - **An item** is one numbered question whose answer starts with yes or no, cites at
@@ -283,7 +284,7 @@ read from the Internet Archive's copies because PHMSA's site refuses scripts
   about 0.42 per letter, and about half were answered yes. 19 cited a section that eCFR
   marks as substantively amended since the letter, and in 15 of them a cited paragraph
   really changed. All 15 unflagged questions, the control, compared unchanged. The rule
-  keeps about 56%, so roughly 200 questions from the 871 letters, though anything from
+  keeps about 56%, so roughly 200 questions from the 903 letters, though anything from
   120 to 300 would not be surprising.
 - **Unanswerable questions**, about one item in five, measure declining. The owner
   writes them in one private file, about rules clearly outside the corpus, such as the
@@ -312,6 +313,11 @@ Code divides the letters before anyone reads them
 6. Before any tuning, the held-out file's checksum is committed and a backup is made
    outside the repository. Changing the file voids earlier held-out results, and the
    file is published with the final report.
+
+**Drawn on 2026-11-15**
+([ADR-0018](adr/0018-near-duplicate-letters-and-the-split-draw.md)): the 903 letters
+fell into 862 groups, and the draw sent 543 letters to dev and 360 to held-out, with the
+three letters already read in dev.
 
 Only the owner reads held-out questions or runs held-out commands. The held-out split
 runs once, when the answers stop changing

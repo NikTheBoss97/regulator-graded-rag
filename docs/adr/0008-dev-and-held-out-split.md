@@ -67,6 +67,11 @@ the held-out run happens.
 - **Unverified.** How many letters are near-duplicates, the full number of usable
   questions, and the one-in-five assumption behind the power estimate.
 
+## Amendments
+
+- 2026-11-15: The split was drawn by code before any letter was read (ADR-0018): 903
+  letters with reference numbers from 2017 on, 543 dev and 360 held-out.
+
 ## References
 
 - Patrick Lewis, Pontus Stenetorp and Sebastian Riedel, [Question and Answer Test-Train Overlap in Open-Domain Question Answering Datasets](https://doi.org/10.18653/v1/2021.eacl-main.86) (EACL, 2021).
