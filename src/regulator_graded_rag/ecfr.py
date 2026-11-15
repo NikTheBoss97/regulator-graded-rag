@@ -21,7 +21,7 @@ import os
 import re
 import time
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
 
@@ -70,6 +70,67 @@ class UnitText:
     text: str
     footnotes: str
     paragraphs: Mapping[str, str]  # each paragraph's text with its subparagraphs'
+    # Paragraphs a citation cannot be compared by alone: one followed by content outside
+    # it before the next paragraph starts, such as a table eCFR places after its div, and
+    # one whose id sits on an element other than a div.
+    loose: frozenset[str] = frozenset()
+    # The file names of the figures, in order: "" for the unit, and by paragraph.
+    figures: Mapping[str, tuple[str, ...]] = field(default_factory=dict)
+
+
+# Not rule content, so they make no paragraph loose: the amendment citations, the
+# editorial notes and the header of a footnote box.
+_NOT_RULES = frozenset({"citation", "editorial-note", "seal-block"})
+
+
+def _loose(unit: Element) -> frozenset[str]:
+    """The paragraphs whose content is not all inside their own div."""
+    heading = next(
+        (e for e in unit.elements() if e is not unit and e.tag in _HEADINGS), None
+    )
+    loose: set[str] = set()
+    ended: list[str] = []  # paragraphs that ended since the last paragraph began
+    stack: list[Element | str | tuple[str]] = list(reversed(unit.children))
+    while stack:
+        node = stack.pop()
+        if isinstance(node, tuple):
+            ended.append(node[0])
+        elif isinstance(node, str):
+            if node.strip():
+                loose.update(ended)
+        elif node is heading or _NOT_RULES & set(node.classes):
+            continue
+        else:
+            if node.tag == "img":
+                loose.update(ended)
+            name = node.attrs.get("id", "")
+            if name.startswith("p-") and node.tag != "div":
+                loose.add(name[2:])
+            elif name.startswith("p-"):
+                ended.clear()
+                stack.append(
+                    (name[2:],)
+                )  # popped once the paragraph's children are out
+            stack += reversed(node.children)
+    return frozenset(loose)
+
+
+def _figures(unit: Element) -> dict[str, tuple[str, ...]]:
+    """The file names of the figures in the unit, "" first, then in each paragraph."""
+
+    def names(root: Element) -> tuple[str, ...]:
+        return tuple(
+            e.attrs.get("src", "").rsplit("/", 1)[-1]
+            for e in root.elements()
+            if e.tag == "img"
+        )
+
+    found = {"": names(unit)} if names(unit) else {}
+    for e in unit.elements():
+        name = e.attrs.get("id", "")
+        if e.tag == "div" and name.startswith("p-") and (inside := names(e)):
+            found[name[2:]] = inside
+    return found
 
 
 def _left_out(unit: Element) -> set[int]:
@@ -148,7 +209,12 @@ def parse_units(html: str) -> dict[str, UnitText]:
         skip = _left_out(div)
         footnotes = [_text(e, set()) for e in div.elements() if "footnote" in e.classes]
         units[key] = UnitText(
-            key, _text(div, skip), " ".join(footnotes), _paragraphs(div, skip)
+            key,
+            _text(div, skip),
+            " ".join(footnotes),
+            _paragraphs(div, skip),
+            _loose(div),
+            _figures(div),
         )
     return units
 

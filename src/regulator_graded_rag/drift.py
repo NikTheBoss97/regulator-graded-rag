@@ -4,8 +4,11 @@
 A letter's answer holds only if the rules it cites did not change between the letter's
 day and the edition's, 1 October 2025. A cited paragraph is compared together with its
 subparagraphs, which eCFR nests inside it, and a citation of a whole section compares
-the whole section and its footnotes. A unit or paragraph absent on either day is
-"missing", and an item citing it is dropped like a changed one.
+the whole section and its footnotes. Figures are compared by their file names. A
+paragraph whose content eCFR does not keep inside its div, such as a table placed after
+it, or whose id is not on a div, is compared by its whole section (the owner's rulings
+of 2026-11-15). A unit or paragraph absent on either day is "missing", and an item
+citing it is dropped like a changed one.
 """
 
 import re
@@ -46,16 +49,28 @@ def parse_citation(text: str) -> Citation:
     return Citation(match[1], match[2])
 
 
+def _whole(unit: UnitText) -> tuple[str, str, tuple[str, ...]]:
+    return unit.text, unit.footnotes, unit.figures.get("", ())
+
+
+def _paragraph(unit: UnitText, label: str) -> tuple[str, tuple[str, ...]] | None:
+    text = unit.paragraphs.get(label)
+    return None if text is None else (text, unit.figures.get(label, ()))
+
+
 def compare(
     citation: Citation, then: Mapping[str, UnitText], edition: Mapping[str, UnitText]
 ) -> Outcome:
+    """Text and figures' file names are compared. A paragraph whose content is not all
+    inside its own div (loose) is compared by its whole unit, so it can never read
+    unchanged while a table that belongs to it changed (owner, 2026-11-15)."""
     a, b = then.get(citation.unit), edition.get(citation.unit)
     if a is None or b is None:
         return "missing"
-    if not citation.paragraph:
-        same = (a.text, a.footnotes) == (b.text, b.footnotes)
-        return "unchanged" if same else "changed"
-    pa, pb = a.paragraphs.get(citation.label), b.paragraphs.get(citation.label)
+    label = citation.label
+    if not citation.paragraph or label in a.loose or label in b.loose:
+        return "unchanged" if _whole(a) == _whole(b) else "changed"
+    pa, pb = _paragraph(a, label), _paragraph(b, label)
     if pa is None or pb is None:
         return "missing"
     return "unchanged" if pa == pb else "changed"

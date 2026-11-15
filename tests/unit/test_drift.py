@@ -31,6 +31,45 @@ def test_outcomes() -> None:
     assert compare(Citation("173.10"), then, edition) == "missing"
 
 
+def test_a_paragraph_absent_on_one_day_only_is_missing() -> None:
+    then = units("(a) Same.", "(b) Same.")
+    edition = {"173.9": UnitText("173.9", "(a) Same.", "", {"173.9(a)": "(a) Same."})}
+    assert compare(Citation("173.9", "(b)"), then, edition) == "missing"
+
+
+def test_a_loose_paragraph_is_compared_by_its_whole_section() -> None:
+    # The owner's ruling of 2026-11-15: content outside the cited paragraph that
+    # follows it, such as a table, makes the whole section the comparison.
+    def unit(table: str) -> dict[str, UnitText]:
+        text = f"(b) Same, and the following table: {table}"
+        loose = frozenset({"173.9(b)"})
+        return {"173.9": UnitText("173.9", text, "", {"173.9(b)": "(b) Same."}, loose)}
+
+    cited = Citation("173.9", "(b)")
+    assert compare(cited, unit("Old row."), unit("New row.")) == "changed"
+    assert compare(cited, unit("Old row."), unit("Old row.")) == "unchanged"
+
+
+def test_a_changed_figure_changes_its_paragraph() -> None:
+    # The owner's ruling of 2026-11-15: figures are compared by file name.
+    def unit(figure: str) -> dict[str, UnitText]:
+        figures = {"": (figure,), "173.9(a)": (figure,)}
+        return {
+            "173.9": UnitText(
+                "173.9", "(a) A.", "", {"173.9(a)": "(a) A."}, figures=figures
+            )
+        }
+
+    assert (
+        compare(Citation("173.9", "(a)"), unit("ER1.gif"), unit("ER2.gif")) == "changed"
+    )
+    assert compare(Citation("173.9"), unit("ER1.gif"), unit("ER2.gif")) == "changed"
+    assert (
+        compare(Citation("173.9", "(a)"), unit("ER1.gif"), unit("ER1.gif"))
+        == "unchanged"
+    )
+
+
 def test_a_section_absent_on_the_letters_day_is_missing(tmp_path: Path) -> None:
     def get(url: str) -> Response:
         if "/2017-06-01/" in url:

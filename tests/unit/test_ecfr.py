@@ -83,6 +83,36 @@ def test_a_paragraph_printed_twice_is_kept_once_unless_its_copies_differ() -> No
     assert parse_units(page)["178.55"].paragraphs == {"178.55(i)": "(i) Same."}
 
 
+def test_content_after_a_paragraph_outside_it_makes_it_loose() -> None:
+    # PAGE's table follows 173.9(b)'s div, as §172.400's label table does on eCFR.
+    unit = parse_units(PAGE)["173.9"]
+    assert unit.loose == {"173.9(b)"}
+
+
+def test_paragraphs_not_written_as_divs_are_loose() -> None:
+    # §176.63 marks its paragraphs on p elements (measured on 2026-11-15).
+    page = (
+        '<div class="section" id="176.63"><h4>§ 176.63 Stowage.</h4>'
+        '<p id="p-176.63(a)">(a) One.</p><p id="p-176.63(b)">(b) Two.</p></div>'
+    )
+    unit = parse_units(page)["176.63"]
+    assert unit.paragraphs == {}
+    assert unit.loose == frozenset({"176.63(a)", "176.63(b)"})
+
+
+def test_figures_are_listed_by_paragraph_and_for_the_unit() -> None:
+    src = "https://img.federalregister.gov/ER10AP24.014/ER10AP24.014_large.png"
+    page = (
+        '<div class="section" id="172.400"><h4>§ 172.400 Labels.</h4>'
+        f'<div id="p-172.400(a)"><p>(a) Label:</p><img src="{src}"></div></div>'
+    )
+    figures = parse_units(page)["172.400"].figures
+    assert figures == {
+        "": ("ER10AP24.014_large.png",),
+        "172.400(a)": ("ER10AP24.014_large.png",),
+    }
+
+
 def test_an_unexpected_page_is_refused() -> None:
     with pytest.raises(ValueError, match="173.9"):
         parse_units(PAGE + PAGE)
