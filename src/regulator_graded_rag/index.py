@@ -62,6 +62,9 @@ _DERIVED = (
     ),
     "INSERT INTO {s}.df SELECT lexeme, count(*) FROM {s}.terms GROUP BY lexeme",
     "INSERT INTO {s}.stats SELECT count(*), avg(length) FROM {s}.lengths",
+    # Statistics for the planner now: autovacuum never analyzes the one-row stats table,
+    # and without them it chose a search plan about five times slower (2026-11-15).
+    "ANALYZE {s}.passages, {s}.terms, {s}.lengths, {s}.df, {s}.stats",
 )
 
 Conn = psycopg.Connection[tuple[Any, ...]]
