@@ -8,11 +8,15 @@ Internet Archive's captures of letter 20-0003:
   node--type-interpretation-response, one p per field labelled by a strong ("Response
   Publish Date:" with a time element whose datetime attribute is ISO, "Company Name:",
   "Individual Name:"), then a p whose strong reads "Response text:", then the letter's
-  paragraphs until the next h2: p elements, or in some captures div elements holding
-  no block of their own (25 letters' captures of 2026, measured on 2026-11-15);
-- "content-wall", from 2020-2021: a section with id content-wall, the same labels in a b
-  at the start of a td (the publish date as MM-DD-YYYY), and the letter's p paragraphs
-  inside the td whose b reads "Response text:".
+  text until the next h2;
+- "content-wall", in captures from 2019 to 2024: a section with id content-wall, the same
+  labels in a b at the start of a td (the publish date as MM-DD-YYYY), and the letter's
+  text in the td whose b reads "Response text:".
+
+The letter's text is read as one paragraph per run of text between block boundaries,
+since it is not always in p elements: measured on 2026-11-15, 25 letters' captures of
+2026 hold paragraphs in div elements, and 89 letters hold part of the response in list
+items, table cells or text between blocks.
 
 A page in neither layout gives no LetterPage, never an empty one; skeleton() and
 signature() describe such a page by its tags, ids and classes, never by its text.
@@ -32,9 +36,16 @@ PUBLISHED = "Response Publish Date:"
 COMPANY = "Company Name:"
 INDIVIDUAL = "Individual Name:"
 RESPONSE = "Response text:"
-# The content-wall layout's publish date: MM-DD-YYYY in the captures of 2020-2021,
-# M/D/YYYY in the design's notes.
+# The content-wall layout's publish date: MM-DD-YYYY in all 15 captures in that layout
+# (2019 to 2024, measured on 2026-11-15), M/D/YYYY in the design's notes.
 _WALL_DATES = ("%m-%d-%Y", "%m/%d/%Y")
+# Elements that end one run of a letter's text and start another.
+_BLOCKS = frozenset(
+    {"address", "article", "aside", "blockquote", "caption", "dd", "details", "div"}
+    | {"dl", "dt", "fieldset", "figcaption", "figure", "footer", "form", "h1", "h2"}
+    | {"h3", "h4", "h5", "h6", "header", "hr", "li", "main", "nav", "ol", "p", "pre"}
+    | {"section", "table", "tbody", "td", "tfoot", "th", "thead", "tr", "ul"}
+)
 
 # Elements that never have an end tag.
 _VOID = frozenset(
@@ -186,25 +197,40 @@ def _wall_date(element: _Element | None) -> date | None:
     return None
 
 
-def _is_paragraph(element: _Element) -> bool:
-    """A p, or a div that holds no p or div of its own."""
-    if element.tag == "p":
-        return True
-    inner = (e for e in element.elements() if e is not element)
-    return element.tag == "div" and not any(e.tag in ("p", "div") for e in inner)
+def _paragraphs_after(scope: _Element, start: _Element) -> list[str]:
+    """The text in scope after start's own subtree, up to the next h2.
 
-
-def _paragraphs_after(container: _Element, start: _Element) -> list[str]:
-    """The text of every paragraph after start, up to the next h2."""
+    Each run of text between two block boundaries is one paragraph, so every character
+    is read once: a p, a list item, a table cell, or text between blocks.
+    """
     texts: list[str] = []
-    started = False
-    for element in container.elements():
-        if element is start:
-            started = True
-        elif started and element.tag == "h2":
-            break
-        elif started and _is_paragraph(element) and (text := element.text()):
+    run: list[str] = []
+
+    def end_run() -> None:
+        if text := " ".join("".join(run).split()):
             texts.append(text)
+        run.clear()
+
+    started = False
+    stack: list[_Element | str | None] = [scope]  # None marks where a block ends
+    while stack:
+        node = stack.pop()
+        if node is None:
+            end_run()
+        elif isinstance(node, str):
+            run += [node] if started else []
+        elif node is start:
+            started = True
+        elif started and node.tag == "h2":
+            break
+        elif node.tag == "br":
+            run += [" "] if started else []
+        else:
+            if node.tag in _BLOCKS:
+                end_run()
+                stack.append(None)
+            stack += reversed(node.children)
+    end_run()
     return texts
 
 
@@ -223,11 +249,8 @@ def read_page(html: str) -> LetterPage | None:
         fields = _fields(container, "td", "b")
         published = _wall_date(fields.get(PUBLISHED))
         response = fields.get(RESPONSE)
-        paragraphs = [
-            text
-            for e in (response.elements() if response else ())
-            if e.tag == "p" and (text := e.text())
-        ]
+        label = _first(response, "b") if response else None
+        paragraphs = _paragraphs_after(response, label) if response and label else []
     if not paragraphs:
         return None
     company, individual = (fields.get(k) for k in (COMPANY, INDIVIDUAL))
