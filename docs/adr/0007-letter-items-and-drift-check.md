@@ -77,6 +77,31 @@ letters stay eligible for held-out.
 - The letters are public, so a model may have read them in training. ADR-0012 measures
   this with the closed-book run and with letters dated after the model's training cutoff.
 
+## Amendments
+
+- 2026-11-15: What building the drift check found in eCFR:
+  - Its full-text endpoints need `Accept-Encoding: gzip`. Its renderer redirects every
+    part or section request to a canonical address, which the page cache follows, and
+    answers 404 for a section that did not exist on the day asked, which the check reads
+    as missing.
+  - Paragraphs are now nested `div`s, so a cited paragraph's text holds its
+    subparagraphs'.
+  - The official §178.55 prints its paragraph (i) twice, word for word, and eCFR repeats
+    its paragraph IDs. A paragraph whose copies all read the same counts once; one whose
+    copies differ is left out, so a citation of it reads as missing.
+  - Its text for 1 October 2025 matches the corpus in 1,067 of the 1,069 units. That
+    holds after reading U+2044 as "/", dropping the brackets around footnote numbers,
+    comparing footnotes apart and ignoring "§". eCFR also keeps 28 units that the corpus
+    has as reserved.
+  - The owner ruled on the other two after comparing them with the printed edition,
+    which agrees with the corpus in both. eCFR is wrong, and each is a known difference:
+    - §180.407: eCFR prints the heading of paragraph (g)(1) as "Test Procedure—", where
+      page 360 reads "Test procedure.";
+    - §180.209: eCFR shows Table 1 to paragraph (a) twice, where page 335 shows it once,
+      with 16 rows.
+
+    An item citing either goes to the owner, flagged.
+
 ## References
 
 - eCFR, [API documentation](https://www.ecfr.gov/developers/documentation/api/v1).
