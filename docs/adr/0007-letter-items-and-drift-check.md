@@ -101,6 +101,17 @@ letters stay eligible for held-out.
       with 16 rows.
 
     An item citing either goes to the owner, flagged.
+- 2026-11-15, after review: eCFR does not keep all of a paragraph's content inside its
+  `div`. On the edition's pages, 28 tables sit outside every paragraph, such as
+  §172.400's label table after paragraph (b)'s "the following table:", and 300
+  paragraphs in 65 sections are followed by content outside them. §176.63 marks its
+  paragraphs on `p` elements. Figures carry no text: the pages hold 157 images in 89
+  sections. The owner ruled on both:
+  - a citation of such a paragraph is compared by its whole section, so a changed table
+    can never read unchanged;
+  - figures are compared by their file names.
+
+  The comparison with the corpus stays text-only.
 
 ## References
 
