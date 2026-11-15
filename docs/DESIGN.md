@@ -422,7 +422,7 @@ The repository, CI and security rules are in
 - **Tests.** Unit tests need no database or network. Integration tests run against a
   real Postgres in Docker, not mocks. They cover:
   - the passage builder: word conservation, one passage per table row, stable IDs;
-  - BM25 in SQL against bm25s on a small sample corpus;
+  - BM25 in SQL against bm25s on the whole corpus;
   - the quote check, the decline rule, JSON parsing, the metrics and the statistical
     test, against hand-worked examples;
   - the split: the same seed gives the same split, and near-duplicates stay together;

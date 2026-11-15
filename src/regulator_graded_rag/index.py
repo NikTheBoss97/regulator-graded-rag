@@ -129,8 +129,9 @@ def build_index(
         )
 
 
-def indexed_version(conn: Conn, schema: str = SCHEMA) -> str | None:
-    """The corpus version the schema was built from; None when there is no index."""
+def index_label(conn: Conn, schema: str = SCHEMA) -> tuple[str, str] | None:
+    """The corpus version and text-search configuration the schema was built with;
+    None when there is no index."""
     exists = conn.execute(
         "SELECT 1 FROM information_schema.tables"
         " WHERE table_schema = %s AND table_name = 'meta'",
@@ -139,9 +140,17 @@ def indexed_version(conn: Conn, schema: str = SCHEMA) -> str | None:
     if exists is None:
         return None
     row = conn.execute(
-        sql.SQL("SELECT corpus_version FROM {s}.meta").format(s=sql.Identifier(schema))
+        sql.SQL("SELECT corpus_version, config::text FROM {s}.meta").format(
+            s=sql.Identifier(schema)
+        )
     ).fetchone()
-    return None if row is None else str(row[0])
+    return None if row is None else (str(row[0]), str(row[1]))
+
+
+def indexed_version(conn: Conn, schema: str = SCHEMA) -> str | None:
+    """The corpus version the schema was built from; None when there is no index."""
+    label = index_label(conn, schema)
+    return None if label is None else label[0]
 
 
 def main(argv: Sequence[str] | None = None) -> int:
