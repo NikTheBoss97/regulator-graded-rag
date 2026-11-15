@@ -289,13 +289,13 @@ def _list(path: Path, get: Get) -> int:
     return 1 if failed else 0
 
 
-def _check(path: Path, get: Get) -> int:
+def _check(path: Path, get: Get, splits: Mapping[str, str] | None) -> int:
     start = time.monotonic()
     letters = load_letters(path)
     failed = 0
     for i, letter in enumerate(letters, start=1):
         prefix = _progress(i, len(letters), letter.id)
-        target = letter_path(letter.id, None)
+        target = letter_path(letter.id, splits)
         if _matches(target, letter):
             print(f"{prefix}: present ({letter.size:,} bytes)", flush=True)
             continue
@@ -377,7 +377,12 @@ def main(argv: Sequence[str] | None = None, *, get: Get | None = None) -> int:
             ' run "uv run python -m regulator_graded_rag.letters --list"'
         )
         return 1
-    return _check(args.letters, getter)
+    # Imported here: split imports this module. After the split each letter lives in its
+    # split's folder.
+    from regulator_graded_rag.split import load_split
+
+    splits = load_split(args.split) if args.split.exists() else None
+    return _check(args.letters, getter, splits)
 
 
 if __name__ == "__main__":

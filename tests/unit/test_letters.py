@@ -244,6 +244,17 @@ def test_the_checksum_mode_never_overwrites_with_other_bytes(
     assert (tmp_path / "unsplit" / "17-0001.html").read_bytes() == b"changed"
 
 
+def test_after_the_split_the_checksum_mode_looks_in_each_split_folder(
+    tmp_path: Path, one_letter: bytes, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(letters, "HELDOUT_LETTERS", tmp_path / "heldout")
+    row = {"letter": "17-0001", "group": "17-0001", "year": 2017, "split": "heldout"}
+    (tmp_path / "split.jsonl").write_text(json.dumps(row) + "\n", encoding="utf-8")
+    (tmp_path / "heldout").mkdir()
+    (tmp_path / "heldout" / "17-0001.html").write_bytes(one_letter)
+    assert check(tmp_path, no_request) == 0
+
+
 def test_the_checksum_mode_needs_a_manifest(tmp_path: Path) -> None:
     assert check(tmp_path, no_request) == 1
 
