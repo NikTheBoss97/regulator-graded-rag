@@ -7,8 +7,9 @@ Internet Archive's captures of letter 20-0003:
 - "article", the current one: an article whose class holds
   node--type-interpretation-response, one p per field labelled by a strong ("Response
   Publish Date:" with a time element whose datetime attribute is ISO, "Company Name:",
-  "Individual Name:"), then a p whose strong reads "Response text:", then the letter's p
-  paragraphs until the next h2;
+  "Individual Name:"), then a p whose strong reads "Response text:", then the letter's
+  paragraphs until the next h2: p elements, or in some captures div elements holding
+  no block of their own (25 letters' captures of 2026, measured on 2026-11-15);
 - "content-wall", from 2020-2021: a section with id content-wall, the same labels in a b
   at the start of a td (the publish date as MM-DD-YYYY), and the letter's p paragraphs
   inside the td whose b reads "Response text:".
@@ -185,8 +186,16 @@ def _wall_date(element: _Element | None) -> date | None:
     return None
 
 
+def _is_paragraph(element: _Element) -> bool:
+    """A p, or a div that holds no p or div of its own."""
+    if element.tag == "p":
+        return True
+    inner = (e for e in element.elements() if e is not element)
+    return element.tag == "div" and not any(e.tag in ("p", "div") for e in inner)
+
+
 def _paragraphs_after(container: _Element, start: _Element) -> list[str]:
-    """The text of every p after start, up to the next h2."""
+    """The text of every paragraph after start, up to the next h2."""
     texts: list[str] = []
     started = False
     for element in container.elements():
@@ -194,7 +203,7 @@ def _paragraphs_after(container: _Element, start: _Element) -> list[str]:
             started = True
         elif started and element.tag == "h2":
             break
-        elif started and element.tag == "p" and (text := element.text()):
+        elif started and _is_paragraph(element) and (text := element.text()):
             texts.append(text)
     return texts
 
