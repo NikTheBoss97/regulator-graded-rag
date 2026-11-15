@@ -97,6 +97,37 @@ Drawing the groups:
   numbers, captures and checksums, never text.
 - **Unverified** until the split runs: how many letters link.
 
+## Amendments
+
+- 2026-11-15: The split was drawn as decided, on Python 3.14.7, and the assignment's
+  SHA-256 is the reviewed dry run's digest, `a2215b4c…`. The near-duplicate report:
+  - 903 letters, 5 of them without text; 3 links by text and 41 by citation.
+  - Each letter's highest similarity to another, by tenths from 0.0–0.1 to 0.9–1.0:
+    820, 57, 6, 7, 2, 0, 0, 6, 0 and 0 letters. No letter falls between 0.5 and 0.7,
+    though 2 fall just below the threshold, between 0.4 and 0.5.
+  - 862 groups: 825 single letters, 33 pairs and 4 groups of three.
+  - Seven reference-shaped strings use a Unicode dash, not the hyphen the citation
+    pattern reads. None cites another letter in the pool, so no link was missed
+    (counted without reading the letters).
+
+  | Year | Groups | Letters | Dev groups | Held-out groups |
+  |---|---|---|---|---|
+  | 2017 | 117 | 126 | 70 | 47 |
+  | 2018 | 132 | 138 | 79 | 53 |
+  | 2019 | 103 | 108 | 62 | 41 |
+  | 2020 | 67 | 71 | 40 | 27 |
+  | 2021 | 92 | 99 | 55 | 37 |
+  | 2022 | 92 | 97 | 55 | 37 |
+  | 2023 | 68 | 70 | 41 | 27 |
+  | 2024 | 86 | 89 | 52 | 34 |
+  | 2025 | 77 | 77 | 46 | 31 |
+  | 2026 | 28 | 28 | 17 | 11 |
+  | **Total** | **862** | **903** | **517 (543 letters)** | **345 (360 letters)** |
+
+  A group counts in the year of its lowest-numbered letter, so 2017's groups hold 126
+  letters: its own 118 and 8 later letters joined to them. The three letters already
+  read are in dev.
+
 ## References
 
 - Andrei Z. Broder, [On the Resemblance and Containment of Documents](https://doi.org/10.1109/SEQUEN.1997.666900) (Compression and Complexity of Sequences, 1997).

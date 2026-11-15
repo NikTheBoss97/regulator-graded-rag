@@ -29,7 +29,8 @@ split into 13,539 passages, which pass their parse checks. The owner compared 25
 passages with [the printed pages](corpus/parse-review.md): 20 match, and 5 differ only
 in that the page sets A₁ and A₂ as subscripts, which
 [ADR-0017](docs/adr/0017-passage-text-from-the-xml.md#amendments) keeps as plain text.
-Phase 2 (evaluation) is next. This is not compliance or legal advice.
+Phase 2 (evaluation) is in progress: 903 regulator letters are split into dev and
+held-out by a committed seed. This is not compliance or legal advice.
 
 ## Results
 
@@ -38,8 +39,8 @@ hand, and its first row will be the BM25 baseline in phase 2.
 
 ## How it is evaluated
 
-- **Questions** are numbered yes-or-no questions from the regulator's letters of 2017 to
-  2025, kept only when every paragraph they cite reads the same in the 2025 edition.
+- **Questions** are numbered yes-or-no questions from the regulator's letters from 2017
+  on, kept only when every paragraph they cite reads the same in the 2025 edition.
   Code splits them into dev and held-out before anyone reads the letters, and the
   held-out split runs once.
 - **Retrieval** is scored by section recall@10: the share of the sections the regulator
