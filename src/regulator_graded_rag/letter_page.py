@@ -22,11 +22,11 @@ A page in neither layout gives no LetterPage, never an empty one; skeleton() and
 signature() describe such a page by its tags, ids and classes, never by its text.
 """
 
-from collections.abc import Iterator
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import date, datetime
-from html.parser import HTMLParser
 from typing import Literal
+
+from regulator_graded_rag.html_tree import Element, first, parse
 
 Layout = Literal["article", "content-wall"]
 
@@ -47,26 +47,6 @@ _BLOCKS = frozenset(
     | {"section", "table", "tbody", "td", "tfoot", "th", "thead", "tr", "ul"}
 )
 
-# Elements that never have an end tag.
-_VOID = frozenset(
-    {"area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta"}
-    | {"source", "track", "wbr"}
-)
-# HTML lets these end tags be left out: an open element (the key) ends when one of the
-# start tags in its value opens.
-_ENDED_BY = {
-    "p": frozenset(
-        {"address", "article", "aside", "blockquote", "details", "div", "dl"}
-        | {"fieldset", "figcaption", "figure", "footer", "form", "header", "hgroup"}
-        | {"h1", "h2", "h3", "h4", "h5", "h6", "hr", "main", "menu", "nav", "ol"}
-        | {"p", "pre", "section", "table", "ul"}
-    ),
-    "li": frozenset({"li"}),
-    "td": frozenset({"td", "th", "tr"}),
-    "th": frozenset({"td", "th", "tr"}),
-    "tr": frozenset({"tr"}),
-}
-
 
 @dataclass(frozen=True)
 class LetterPage:
@@ -81,75 +61,7 @@ class LetterPage:
         return "\n".join(self.paragraphs)
 
 
-@dataclass
-class _Element:
-    tag: str
-    attrs: dict[str, str]
-    children: list[_Element | str] = field(default_factory=list)
-
-    @property
-    def classes(self) -> list[str]:
-        return self.attrs.get("class", "").split()
-
-    def elements(self) -> Iterator[_Element]:
-        """This element and every element inside it, in document order."""
-        stack = [self]
-        while stack:
-            element = stack.pop()
-            yield element
-            stack += reversed([c for c in element.children if isinstance(c, _Element)])
-
-    def text(self) -> str:
-        """Its text, with br read as a space and whitespace collapsed."""
-        pieces: list[str] = []
-        stack: list[_Element | str] = [self]
-        while stack:
-            node = stack.pop()
-            if isinstance(node, str):
-                pieces.append(node)
-            elif node.tag == "br":
-                pieces.append(" ")
-            else:
-                stack += reversed(node.children)
-        return " ".join("".join(pieces).split())
-
-
-class _Tree(HTMLParser):
-    """An element tree, built the way HTML closes the elements a page leaves open."""
-
-    def __init__(self) -> None:
-        super().__init__(convert_charrefs=True)  # entities come back decoded
-        self.root = _Element("#document", {})
-        self._open = [self.root]
-
-    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
-        while tag in _ENDED_BY.get(self._open[-1].tag, ()):
-            self._open.pop()
-        element = _Element(tag, {name: value or "" for name, value in attrs})
-        self._open[-1].children.append(element)
-        if tag not in _VOID:
-            self._open.append(element)
-
-    def handle_endtag(self, tag: str) -> None:
-        # An end tag closes the nearest open element it names, and any left open inside
-        # it; one that names no open element is ignored.
-        for i in range(len(self._open) - 1, 0, -1):
-            if self._open[i].tag == tag:
-                del self._open[i:]
-                return
-
-    def handle_data(self, data: str) -> None:
-        self._open[-1].children.append(data)
-
-
-def _tree(html: str) -> _Element:
-    parser = _Tree()
-    parser.feed(html)
-    parser.close()
-    return parser.root
-
-
-def _container(root: _Element) -> tuple[Layout, _Element] | None:
+def _container(root: Element) -> tuple[Layout, Element] | None:
     for element in root.elements():
         if element.tag == "article" and ARTICLE_CLASS in element.classes:
             return "article", element
@@ -158,27 +70,22 @@ def _container(root: _Element) -> tuple[Layout, _Element] | None:
     return None
 
 
-def _first(root: _Element, tag: str) -> _Element | None:
-    """The first element with this tag at or inside root, in document order."""
-    return next((e for e in root.elements() if e.tag == tag), None)
-
-
-def _fields(container: _Element, block: str, label_tag: str) -> dict[str, _Element]:
+def _fields(container: Element, block: str, label_tag: str) -> dict[str, Element]:
     """Each block element whose first label element holds a label, by that label."""
-    found: dict[str, _Element] = {}
+    found: dict[str, Element] = {}
     for element in container.elements():
-        if element.tag == block and (label := _first(element, label_tag)) is not None:
+        if element.tag == block and (label := first(element, label_tag)) is not None:
             found.setdefault(label.text(), element)
     return found
 
 
-def _value(element: _Element, label: str) -> str:
+def _value(element: Element, label: str) -> str:
     """The element's text after its label."""
     return element.text().removeprefix(label).strip()
 
 
-def _article_date(element: _Element | None) -> date | None:
-    stamp = _first(element, "time") if element else None
+def _article_date(element: Element | None) -> date | None:
+    stamp = first(element, "time") if element else None
     if stamp is None:
         return None
     try:
@@ -187,7 +94,7 @@ def _article_date(element: _Element | None) -> date | None:
         return None
 
 
-def _wall_date(element: _Element | None) -> date | None:
+def _wall_date(element: Element | None) -> date | None:
     value = _value(element, PUBLISHED) if element else ""
     for form in _WALL_DATES:
         try:
@@ -197,7 +104,7 @@ def _wall_date(element: _Element | None) -> date | None:
     return None
 
 
-def _paragraphs_after(scope: _Element, start: _Element) -> list[str]:
+def _paragraphs_after(scope: Element, start: Element) -> list[str]:
     """The text in scope after start's own subtree, up to the next h2.
 
     Each run of text between two block boundaries is one paragraph, so every character
@@ -212,7 +119,7 @@ def _paragraphs_after(scope: _Element, start: _Element) -> list[str]:
         run.clear()
 
     started = False
-    stack: list[_Element | str | None] = [scope]  # None marks where a block ends
+    stack: list[Element | str | None] = [scope]  # None marks where a block ends
     while stack:
         node = stack.pop()
         if node is None:
@@ -236,7 +143,7 @@ def _paragraphs_after(scope: _Element, start: _Element) -> list[str]:
 
 def read_page(html: str) -> LetterPage | None:
     """The page's fields and response paragraphs; None for a page in neither layout."""
-    found = _container(_tree(html))
+    found = _container(parse(html))
     if found is None:
         return None
     layout, container = found
@@ -249,7 +156,7 @@ def read_page(html: str) -> LetterPage | None:
         fields = _fields(container, "td", "b")
         published = _wall_date(fields.get(PUBLISHED))
         response = fields.get(RESPONSE)
-        label = _first(response, "b") if response else None
+        label = first(response, "b") if response else None
         paragraphs = _paragraphs_after(response, label) if response and label else []
     if not paragraphs:
         return None
@@ -263,7 +170,7 @@ def read_page(html: str) -> LetterPage | None:
     )
 
 
-def _describe(element: _Element) -> str:
+def _describe(element: Element) -> str:
     """The element's tag, then its id and classes as a CSS selector writes them."""
     ident = f"#{element.attrs['id']}" if element.attrs.get("id") else ""
     return element.tag + ident + "".join(f".{c}" for c in element.classes)
@@ -271,11 +178,11 @@ def _describe(element: _Element) -> str:
 
 def skeleton(html: str, limit: int = 150) -> str:
     """One line per start tag inside main (or body), indented by depth; never any text."""
-    root = _tree(html)
-    top = _first(root, "main") or _first(root, "body") or root
+    root = parse(html)
+    top = first(root, "main") or first(root, "body") or root
     lines: list[str] = []
     stack = [
-        (child, 0) for child in reversed(top.children) if isinstance(child, _Element)
+        (child, 0) for child in reversed(top.children) if isinstance(child, Element)
     ]
     while stack and len(lines) < limit:
         element, depth = stack.pop()
@@ -283,14 +190,14 @@ def skeleton(html: str, limit: int = 150) -> str:
         stack += [
             (child, depth + 1)
             for child in reversed(element.children)
-            if isinstance(child, _Element)
+            if isinstance(child, Element)
         ]
     return "\n".join(lines)
 
 
 def signature(html: str) -> str:
     """The page's layout, or "unknown" with the element that holds "Response text:"."""
-    root = _tree(html)
+    root = parse(html)
     found = _container(root)
     if found is not None:
         return found[0]
