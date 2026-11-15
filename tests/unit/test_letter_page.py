@@ -58,6 +58,26 @@ def test_content_wall_dates_may_use_hyphens() -> None:
     assert page is not None and page.publish_date == date(2020, 4, 17)
 
 
+def test_article_paragraphs_may_be_divs() -> None:
+    # 25 captures from 2026 hold the response in div elements (measured on 2026-11-15).
+    second = "This responds to your letter.<br>Q1. Does the rule apply?"
+    page = ARTICLE.replace("<p>Dear Pat Example:</p>", "<div>Dear Pat Example:</div>")
+    read = read_page(page.replace(f"<p>{second}</p>", f"<div>{second}</div>"))
+    assert read is not None and read.paragraphs == (
+        "Dear Pat Example:",
+        "This responds to your letter. Q1. Does the rule apply?",
+        "A1. Yes. See § 171.1.",
+    )
+
+
+def test_a_div_that_wraps_paragraphs_is_not_one() -> None:
+    label = '<p class="mb-0"><strong>Response text:</strong></p>'
+    wrapped = ARTICLE.replace(label, f"{label}<div>").replace(
+        '<h2 class="mb-4">', '</div><h2 class="mb-4">'
+    )
+    assert read_page(wrapped) == read_page(ARTICLE)
+
+
 def test_the_response_stops_at_the_next_heading() -> None:
     page = read_page(ARTICLE)
     assert page is not None and page.paragraphs[-1] == "A1. Yes. See § 171.1."
