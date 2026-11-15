@@ -4,6 +4,7 @@ import io
 import json
 import sys
 from collections import Counter
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
@@ -180,6 +181,76 @@ def test_skeletons_print_on_a_cp1252_console(
     assert main([*args, "--split", str(tmp_path / "split.jsonl")]) == 0
     console.flush()
     assert b"div.\\u2603" in console.buffer.getvalue()
+
+
+def no_request(url: str) -> Response:
+    raise AssertionError("no request expected")
+
+
+def check(tmp_path: Path, get: Callable[[str], Response], *flags: str) -> int:
+    """Run the command on tmp_path's manifest and split file, with the letters there."""
+    args = ["--letters", str(tmp_path / "letters.jsonl")]
+    return main([*flags, *args, "--split", str(tmp_path / "split.jsonl")], get=get)
+
+
+@pytest.fixture
+def one_letter(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> bytes:
+    """A manifest of one readable letter, whose file belongs in tmp_path/unsplit."""
+    monkeypatch.setattr(letters, "UNSPLIT", tmp_path / "unsplit")
+    data = ARTICLE.encode()
+    letter = Letter(
+        "17-0001",
+        2017,
+        "20260101000000",
+        URL.format("17-0001"),
+        "article",
+        len(data),
+        hashlib.sha256(data).hexdigest(),
+    )
+    write_letters(tmp_path / "letters.jsonl", [letter])
+    return data
+
+
+def test_the_checksum_mode_finds_a_present_letter_without_a_request(
+    tmp_path: Path, one_letter: bytes
+) -> None:
+    (tmp_path / "unsplit").mkdir()
+    (tmp_path / "unsplit" / "17-0001.html").write_bytes(one_letter)
+    assert check(tmp_path, no_request) == 0
+
+
+def test_the_checksum_mode_restores_a_missing_letter_from_its_capture(
+    tmp_path: Path, one_letter: bytes
+) -> None:
+    asked: list[str] = []
+
+    def get(url: str) -> Response:
+        asked.append(url)
+        return Response(200, "text/html", one_letter)
+
+    assert check(tmp_path, get) == 0
+    assert asked == [
+        f"https://web.archive.org/web/20260101000000id_/{URL.format('17-0001')}"
+    ]
+    assert (tmp_path / "unsplit" / "17-0001.html").read_bytes() == one_letter
+
+
+def test_the_checksum_mode_never_overwrites_with_other_bytes(
+    tmp_path: Path, one_letter: bytes
+) -> None:
+    (tmp_path / "unsplit").mkdir()
+    (tmp_path / "unsplit" / "17-0001.html").write_bytes(b"changed")
+    assert check(tmp_path, lambda url: Response(200, "text/html", b"other")) == 1
+    assert (tmp_path / "unsplit" / "17-0001.html").read_bytes() == b"changed"
+
+
+def test_the_checksum_mode_needs_a_manifest(tmp_path: Path) -> None:
+    assert check(tmp_path, no_request) == 1
+
+
+def test_skeletons_are_refused_once_the_split_exists(tmp_path: Path) -> None:
+    (tmp_path / "split.jsonl").write_text("{}\n", encoding="utf-8")
+    assert check(tmp_path, no_request, "--skeletons") == 2
 
 
 def test_listing_is_refused_once_the_split_exists(tmp_path: Path) -> None:
