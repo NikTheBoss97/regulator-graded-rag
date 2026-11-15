@@ -86,13 +86,17 @@ def decoded(body: bytes, encoding: str | None) -> bytes:
         raise gzip.BadGzipFile(f"a gzip body that does not decompress: {err}") from err
 
 
-def http_get(url: str) -> Response:
+def http_get(url: str, *, accept_gzip: bool = False) -> Response:
     """One GET that follows no redirect; any HTTP status comes back as a Response.
 
-    Network errors propagate: OSError, or an HTTPException such as IncompleteRead when
-    the connection closes before the whole body arrives.
+    accept_gzip asks for a gzip body, which eCFR's full-text endpoints require. Network
+    errors propagate: OSError, or an HTTPException such as IncompleteRead when the
+    connection closes before the whole body arrives.
     """
-    request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
+    headers = {"User-Agent": USER_AGENT}
+    if accept_gzip:
+        headers["Accept-Encoding"] = "gzip"
+    request = urllib.request.Request(url, headers=headers)
     try:
         with _OPENER.open(request, timeout=TIMEOUT_SECONDS) as answer:
             return Response(
