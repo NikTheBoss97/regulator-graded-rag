@@ -15,6 +15,7 @@ import os
 import time
 import urllib.error
 import urllib.request
+import zlib
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from http.client import HTTPException, HTTPMessage
@@ -73,9 +74,16 @@ def decoded(body: bytes, encoding: str | None) -> bytes:
     """The body as the server meant it: decompressed when it came with gzip encoding.
 
     urllib leaves a compressed body as it is, and the Internet Archive replays a page
-    with the Content-Encoding it was captured with, asked for or not.
+    with the Content-Encoding it was captured with, asked for or not. A body that does
+    not decompress raises gzip.BadGzipFile, an OSError, so it is retried and reported
+    like a connection that broke.
     """
-    return gzip.decompress(body) if encoding == "gzip" else body
+    if encoding != "gzip":
+        return body
+    try:
+        return gzip.decompress(body)
+    except (EOFError, zlib.error) as err:
+        raise gzip.BadGzipFile(f"a gzip body that does not decompress: {err}") from err
 
 
 def http_get(url: str) -> Response:

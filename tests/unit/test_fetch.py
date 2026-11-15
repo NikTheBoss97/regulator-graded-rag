@@ -126,5 +126,14 @@ def test_gzip_bodies_are_decompressed() -> None:
     assert decoded(b"<html/>", None) == b"<html/>"
 
 
+def test_a_corrupt_gzip_body_is_a_network_error() -> None:
+    # A body cut short raises EOFError and corrupt data zlib.error, and neither is an
+    # OSError: one bad capture would escape the retries and stop a whole run.
+    good = gzip.compress(b"<html/>" * 100)
+    for broken in (good[:-10], good[:10] + b"\xff" * 20 + good[30:]):
+        with pytest.raises(OSError):
+            decoded(broken, "gzip")
+
+
 def test_requests_name_the_project_and_no_person() -> None:
     assert USER_AGENT == f"regulator-graded-rag/{__version__}"
