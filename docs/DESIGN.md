@@ -14,7 +14,8 @@ The decisions behind it, with the options each one rejected, are in
 
 Status: approved by the owner on 2026-11-08, after approving each section between
 2026-11-05 and 2026-11-08. Phase 1 is built: the repository and its checks, the corpus
-fetch and the passage builder. Phase 2 has drawn the dev and held-out split.
+fetch and the passage builder. Phase 2 has drawn the dev and held-out split, and has
+built BM25 in SQL and the evaluation harness.
 
 ## Goals
 
