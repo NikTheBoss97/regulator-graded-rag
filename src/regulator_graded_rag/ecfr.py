@@ -179,7 +179,8 @@ class Cache:
             url = page_url(day, part, section)
             response = self._get(url)
             location = response.location or ""
-            if 300 <= response.status < 400 and location.startswith(f"{RENDERER}/"):
+            same_day = f"{RENDERER}/{day.isoformat()}/title-49?"
+            if 300 <= response.status < 400 and location.startswith(same_day):
                 response = self._get(location)
             if response.status == 404:
                 raise PageMissing(f"{url}: HTTP 404")
