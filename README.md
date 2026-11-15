@@ -30,7 +30,8 @@ passages with [the printed pages](corpus/parse-review.md): 20 match, and 5 diffe
 in that the page sets A₁ and A₂ as subscripts, which
 [ADR-0017](docs/adr/0017-passage-text-from-the-xml.md#amendments) keeps as plain text.
 Phase 2 (evaluation) is in progress: 903 regulator letters are split into dev and
-held-out by a committed seed. This is not compliance or legal advice.
+held-out by a committed seed, and BM25 in SQL and the evaluation harness are built. This
+is not compliance or legal advice.
 
 ## Results
 
