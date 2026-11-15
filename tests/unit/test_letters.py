@@ -1,6 +1,8 @@
 # Author: Nicola Antonello
 import hashlib
+import io
 import json
+import sys
 from collections import Counter
 from pathlib import Path
 
@@ -153,6 +155,31 @@ def test_the_manifest_is_sorted_json_lines_with_lf(tmp_path: Path) -> None:
     data = (tmp_path / "letters.jsonl").read_bytes()
     assert b"\r" not in data and data.index(b"17-0001") < data.index(b"18-0002")
     assert load_letters(tmp_path / "letters.jsonl") == [a, b]
+
+
+def test_skeletons_print_on_a_cp1252_console(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(letters, "UNSPLIT", tmp_path)
+    page = '<html><body><div class="☃"><p>Access denied</p></div></body></html>'
+    data = page.encode()
+    (tmp_path / "17-0001.html").write_bytes(data)
+    unreadable = Letter(
+        "17-0001",
+        2017,
+        "20260101000000",
+        URL.format("17-0001"),
+        "",
+        len(data),
+        hashlib.sha256(data).hexdigest(),
+    )
+    write_letters(tmp_path / "letters.jsonl", [unreadable])
+    console = io.TextIOWrapper(io.BytesIO(), encoding="cp1252")
+    monkeypatch.setattr(sys, "stdout", console)
+    args = ["--skeletons", "--letters", str(tmp_path / "letters.jsonl")]
+    assert main([*args, "--split", str(tmp_path / "split.jsonl")]) == 0
+    console.flush()
+    assert b"div.\\u2603" in console.buffer.getvalue()
 
 
 def test_listing_is_refused_once_the_split_exists(tmp_path: Path) -> None:
