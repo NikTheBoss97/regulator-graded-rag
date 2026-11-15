@@ -114,6 +114,17 @@ def test_a_redirect_elsewhere_is_refused(tmp_path: Path) -> None:
         cache.page(DAY, "173")
 
 
+def test_a_redirect_to_another_day_is_refused(tmp_path: Path) -> None:
+    elsewhere = page_url(date(2024, 1, 1), "173")
+    answers = {
+        page_url(DAY, "173"): Response(302, "", b"", location=elsewhere),
+        elsewhere: Response(200, "text/html", PAGE.encode()),
+    }
+    with pytest.raises(FetchError, match="redirected to"):
+        Cache(tmp_path, answers.__getitem__).page(DAY, "173")
+    assert list(tmp_path.rglob("*.html")) == []
+
+
 def test_a_page_ecfr_does_not_hold_is_missing(tmp_path: Path) -> None:
     cache = Cache(tmp_path, lambda url: Response(404, "text/html", b"Not found"))
     with pytest.raises(PageMissing, match="173.999"):
