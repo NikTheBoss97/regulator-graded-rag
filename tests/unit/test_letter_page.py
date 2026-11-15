@@ -78,6 +78,56 @@ def test_a_div_that_wraps_paragraphs_is_not_one() -> None:
     assert read_page(wrapped) == read_page(ARTICLE)
 
 
+def before_the_sections(extra: str) -> str:
+    """ARTICLE with extra response markup just before the h2 that ends the response."""
+    return ARTICLE.replace('<h2 class="mb-4">', f'{extra}<h2 class="mb-4">')
+
+
+def test_lists_tables_and_loose_text_are_read() -> None:
+    # 89 letters hold part of the response in list items, table cells or text outside
+    # any paragraph (measured on 2026-11-15).
+    page = read_page(
+        before_the_sections(
+            "<ol><li>Question one?</li><li>Question two?</li></ol>Loose text."
+            "<table><caption>Table 1</caption><tr><th>Item</th><td>Cell</td></tr></table>"
+        )
+    )
+    assert page is not None and page.paragraphs[3:] == (
+        "Question one?",
+        "Question two?",
+        "Loose text.",
+        "Table 1",
+        "Item",
+        "Cell",
+    )
+
+
+def test_each_character_is_read_once() -> None:
+    page = read_page(
+        before_the_sections(
+            "<ul><li>Intro <ul><li>Sub</li></ul> tail</li></ul>"
+            "<p><span><div>Inside</div></span></p>"
+        )
+    )
+    assert page is not None and page.paragraphs[3:] == (
+        "Intro",
+        "Sub",
+        "tail",
+        "Inside",
+    )
+
+
+def test_content_wall_text_outside_paragraphs_is_read() -> None:
+    page = read_page(
+        CONTENT_WALL.replace("<p>A1. No.</p>", "<p>A1. No.</p>Loose text.<br>More.")
+    )
+    assert page is not None and page.paragraphs == (
+        "Dear Pat Example:",
+        "A1. No.",
+        "Loose text. More.",
+    )
+
+
 def test_the_response_stops_at_the_next_heading() -> None:
     page = read_page(ARTICLE)
     assert page is not None and page.paragraphs[-1] == "A1. Yes. See § 171.1."
