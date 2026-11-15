@@ -94,9 +94,9 @@ def test_the_split_file_round_trips_with_lf(tmp_path: Path) -> None:
     assert load_split(tmp_path / "split.jsonl") == {r.letter: r.split for r in rows}
 
 
-def test_a_draw_moves_every_letter_into_its_split(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
-) -> None:
+@pytest.fixture
+def five_letters(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> list[str]:
+    """Five invented letters of 2017, unsplit, and the command's arguments for them."""
     for name in ("UNSPLIT", "DEV_LETTERS", "HELDOUT_LETTERS"):
         monkeypatch.setattr(letters, name, tmp_path / name.lower())
     (tmp_path / "unsplit").mkdir()
@@ -113,27 +113,50 @@ def test_a_draw_moves_every_letter_into_its_split(
             )
         )
     write_letters(tmp_path / "letters.jsonl", rows)
-    args = [
+    return [
         "--letters",
         str(tmp_path / "letters.jsonl"),
         "--split",
         str(tmp_path / "split.jsonl"),
     ]
 
+
+def dry_digest(args: list[str], capsys: pytest.CaptureFixture[str]) -> str:
     assert main([*args, "--dry-run"]) == 0
-    dry = capsys.readouterr().out
+    line = next(x for x in capsys.readouterr().out.splitlines() if "digest" in x)
+    return line.split()[2]
+
+
+def test_a_draw_moves_every_letter_into_its_split(
+    tmp_path: Path, five_letters: list[str], capsys: pytest.CaptureFixture[str]
+) -> None:
+    digest = dry_digest(five_letters, capsys)
     assert (
         not (tmp_path / "split.jsonl").exists()
         and len(list((tmp_path / "unsplit").iterdir())) == 5
     )
-    assert main(args) == 0
-    digest_line = next(x for x in dry.splitlines() if x.startswith("assignment digest"))
-    assert digest_line in capsys.readouterr().out
+    assert main([*five_letters, "--expect", digest]) == 0
+    assert hashlib.sha256((tmp_path / "split.jsonl").read_bytes()).hexdigest() == digest
     splits = load_split(tmp_path / "split.jsonl")
     assert sorted(splits.values()) == ["dev", "dev", "dev", "heldout", "heldout"]
     for letter_id, side in splits.items():
         assert (tmp_path / f"{side}_letters" / f"{letter_id}.html").is_file()
     assert not (tmp_path / "unsplit").exists()
+
+
+def test_a_draw_without_the_reviewed_digest_writes_and_moves_nothing(
+    tmp_path: Path, five_letters: list[str], capsys: pytest.CaptureFixture[str]
+) -> None:
+    digest = dry_digest(five_letters, capsys)
+    assert main(five_letters) == 4
+    assert (
+        main(
+            [*five_letters, "--expect", ("0" if digest[0] != "0" else "1") + digest[1:]]
+        )
+        == 4
+    )
+    assert not (tmp_path / "split.jsonl").exists()
+    assert len(list((tmp_path / "unsplit").iterdir())) == 5
 
 
 def test_the_split_is_drawn_once(tmp_path: Path) -> None:

@@ -1,16 +1,20 @@
 # Author: Nicola Antonello
 """Draw the dev and held-out split of the letters, once, before anyone reads them (ADR-0018).
 
-Usage: python -m regulator_graded_rag.split [--dry-run] [--letters PATH] [--split PATH],
-from the repository root. It checks every letter file against the manifest, groups the
-letters (see groups), and sends 40% of each year's groups, rounded half up, to held-out:
-those with the lowest SHA-256 keys of the seed and their lowest reference number. It
-writes eval/split.jsonl and moves each letter file into its split's folder. --dry-run
-prints the same counts and the assignment's digest, and writes and moves nothing.
-Everything printed is a count, a year or a reference number. The split is drawn once:
-the command refuses to run when the split file exists.
-Exit code 0 when the split is drawn (or would be), 1 when a letter file is missing or
-changed, 2 when the split exists, 3 when a group is too large for the draw.
+Usage: python -m regulator_graded_rag.split (--dry-run | --expect DIGEST) [--letters PATH]
+[--split PATH], from the repository root. It checks every letter file against the
+manifest, groups the letters (see groups), and sends 40% of each year's groups, rounded
+half up, to held-out: those with the lowest SHA-256 keys of the seed and their lowest
+reference number. --dry-run prints the counts and the assignment's digest, with the
+Python version that computed it, and writes and moves nothing. The draw itself needs
+--expect with the digest of the dry run that was approved: it then writes
+eval/split.jsonl, whose SHA-256 is that digest, and moves each letter file into its
+split's folder. Everything printed is a count, a year or a reference number. The split
+is drawn once: the command refuses to run when the split file exists.
+Exit code 0 when the split is drawn (or would be); 1 when a letter file is missing or
+changed, or the unsplit folder still holds files after the draw; 2 when the split
+exists; 3 when a group is too large for the draw; 4 when the draw's digest is not the
+one expected, in which case nothing is written or moved.
 """
 
 import argparse
@@ -18,6 +22,7 @@ import hashlib
 import io
 import json
 import os
+import platform
 import sys
 from collections import Counter, defaultdict
 from collections.abc import Sequence
@@ -64,7 +69,7 @@ def heldout_count(n: int) -> int:
 class Assigned:
     letter: str
     group: str  # the group's lowest reference number
-    year: int  # the reference year of that letter
+    year: int  # the group's year, the stratum of the draw: that number's reference year
     split: Split
 
 
@@ -166,6 +171,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         action="store_true",
         help="print the counts; write and move nothing",
     )
+    parser.add_argument(
+        "--expect",
+        metavar="DIGEST",
+        help="the digest of the approved dry run; the draw refuses any other",
+    )
     parser.add_argument("--letters", type=Path, default=DEFAULT_LETTERS)
     parser.add_argument("--split", type=Path, default=SPLIT_FILE)
     args = parser.parse_args(argv)
@@ -204,9 +214,17 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 3
     rows = assign(grouping.groups)
     print("\n".join(_summary(rows)))
-    print(f"assignment digest {hashlib.sha256(_lines(rows).encode()).hexdigest()}")
+    digest = hashlib.sha256(_lines(rows).encode()).hexdigest()
+    # The grouping reads text with html.parser and \w, so the Python version is recorded.
+    print(f"assignment digest {digest} (Python {platform.python_version()})")
     if args.dry_run:
         return 0
+    if args.expect != digest:
+        print(
+            f"the draw's digest is not the expected {args.expect or '(none given)'}:"
+            " nothing written or moved"
+        )
+        return 4
     write_split(args.split, rows)
     splits = load_split(args.split)
     for letter in manifest:
