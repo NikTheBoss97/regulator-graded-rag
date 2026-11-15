@@ -52,9 +52,41 @@ experiment.
 - Kamphuis et al. found no significant differences between eight BM25 variants on three
   newswire collections, so recording which variant is used matters more than the choice.
 
+## Amendments
+
+- 2026-11-15: What was built, as phase 2 measured it:
+  - **The variant.** The one bm25s calls "lucene", its default. It has Lucene's IDF and
+    no (k1 + 1) factor in the numerator, which Lucene itself dropped in version 8.0
+    because it scales every score alike (LUCENE-8563). Unlike Lucene, which stores a
+    passage's length in one byte, it uses exact lengths, so its scores match bm25s's,
+    not Lucene's own. k1 is 1.2 and b 0.75, the defaults of Lucene and Elasticsearch,
+    fixed before any dev run. Postgres's `english` configuration splits and stems both
+    passages and questions, a repeated query word counts each time, and an index built
+    with another configuration is refused. Every number is double precision, and ties
+    break in corpus order.
+  - **The check.** On all 13,539 passages, for five questions, the SQL scores equal
+    those of bm25s 0.3.16 in float64 to a relative 1e-9. bm25s gets its tokens from the
+    passages' text, not from the index's counts. A changed IDF constant, dropping the
+    count of a repeated query word, or a term count of 1 fails it. A tie broken by ID
+    or not at all fails the test of corpus order.
+  - **The index.** It holds 16,318 lexemes and 869,605 tokens and builds in about 5
+    seconds. The build analyzes its tables: autovacuum never analyzes the one-row
+    statistics table, and without its statistics the planner chose a plan about five
+    times slower.
+  - **The speed.** On the Windows laptop, with Postgres in Docker on WSL2, 20 searches
+    of the top 50 passages took a median of 20 to 30 ms and at most 68 to 116 ms, over
+    three runs. Before the build analyzed its tables, they took a median of 208 to
+    322 ms.
+  - **Postgres's limits.** A tsvector holds at most 256 positions per lexeme, and a
+    position is at most 16,383. A test shows the corpus reaches neither: no position
+    exceeds 383 (the longest passage holds 358 words and 334 terms), and no lexeme
+    occurs more than 27 times in one passage.
+
 ## References
 
 - PostgreSQL documentation, [Controlling Text Search](https://www.postgresql.org/docs/current/textsearch-controls.html).
+- PostgreSQL 18 documentation, [Full Text Search: Limitations](https://www.postgresql.org/docs/18/textsearch-limitations.html).
+- Apache Lucene, [Remove k1+1 from the numerator of BM25Similarity (LUCENE-8563)](https://issues.apache.org/jira/browse/LUCENE-8563), fixed in Lucene 8.0, 2018.
 - [pg_textsearch](https://github.com/timescale/pg_textsearch), [ParadeDB](https://github.com/paradedb/paradedb), [VectorChord-bm25](https://github.com/supervc-stack/VectorChord-bm25) and [bm25s](https://github.com/xhluca/bm25s) on GitHub.
 - Neon documentation, [The pg_search extension](https://neon.com/docs/extensions/pg_search).
 - Stephen Robertson and Hugo Zaragoza, [The Probabilistic Relevance Framework: BM25 and Beyond](https://doi.org/10.1561/1500000019) (Foundations and Trends in Information Retrieval, 2009).
