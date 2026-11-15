@@ -23,9 +23,11 @@ Exit code 0 when every letter is in the manifest with its bytes, 1 when one fail
 
 import argparse
 import hashlib
+import io
 import json
 import os
 import re
+import sys
 import time
 import urllib.parse
 from collections import Counter
@@ -338,6 +340,10 @@ def _skeletons(path: Path) -> int:
 
 
 def main(argv: Sequence[str] | None = None, *, get: Get | None = None) -> int:
+    # Windows encodes a piped stdout as cp1252: escape what it cannot show, such as a
+    # class name in a page's structure, rather than stop.
+    if isinstance(sys.stdout, io.TextIOWrapper):
+        sys.stdout.reconfigure(errors="backslashreplace")
     parser = argparse.ArgumentParser(
         prog="python -m regulator_graded_rag.letters",
         description="List the regulator's letters the Internet Archive holds, fetch"
