@@ -479,8 +479,8 @@ generation lands with its experiment record, in any phase.
 
 Each is made when its phase starts, with options and an ADR:
 
-- **Phase 2:** how near-duplicate letters are detected, the review tool for the owner's
-  check, and the sample-size calculation, redone on dev.
+- **Phase 2:** the review tool for the owner's check, and the sample-size calculation,
+  redone on dev.
 - **Phase 3:** the embedding and reranking models, the fusion method and the reranking
   depth, all settled by experiment.
 - **Phase 4:** the generator model and its server, the number of passages in the
@@ -522,3 +522,4 @@ Each is made when its phase starts, with options and an ADR:
 - [ADR-0015: Phase 1 tooling: Python 3.14, mypy and pinned gate tools](adr/0015-phase-1-tooling.md)
 - [ADR-0016: Commits use GitHub's no-reply email](adr/0016-commits-use-github-no-reply-email.md)
 - [ADR-0017: Passage text from the XML](adr/0017-passage-text-from-the-xml.md)
+- [ADR-0018: Near-duplicate letters and the split draw](adr/0018-near-duplicate-letters-and-the-split-draw.md)

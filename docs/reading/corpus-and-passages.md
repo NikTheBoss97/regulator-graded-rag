@@ -12,6 +12,7 @@ become passages. Part of the [reading list](README.md).
 - GovInfo, [Policies](https://www.govinfo.gov/about/policies) (GovInfo). Its statement that US government works are generally public domain.
 - PHMSA, [Hazardous Materials Safety Interpretations](https://catalog.data.gov/dataset/hazardous-materials-safety-interpretations) (data.gov). The dataset entry for the regulator's interpretation letters.
 - Internet Archive, [Wayback Machine](https://web.archive.org/) (Internet Archive). Where the letters are read from, because the regulator's own site refuses scripts.
+- Internet Archive, [Wayback CDX Server API](https://github.com/internetarchive/wayback/blob/master/wayback-cdx-server/README.md) (Internet Archive). The index of captures the letters were listed from: its filters, fields, page limit and resume key.
 - GPO, [Code of Federal Regulations XML Rendition: User Guide Document](https://www.govinfo.gov/bulkdata/CFR/resources/CFR-XML_User-Guide_v1.pdf) (GPO, 2009). The elements of the CFR's XML, and the warning that its tables may not display as the official PDF does, which is why passages are compared with the printed pages.
 
 ## Parsing and chunking
