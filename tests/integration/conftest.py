@@ -7,8 +7,11 @@ from typing import Any
 import psycopg
 import pytest
 
+from regulator_graded_rag.ecfr import Cache, UnitText, edition_units
+from regulator_graded_rag.fetch import http_get
 from regulator_graded_rag.manifest import Manifest, check_bytes, load_manifest
 from regulator_graded_rag.passages import FileBuild, build_corpus
+from regulator_graded_rag.polite import Paced
 
 REPO = Path(__file__).resolve().parents[2]
 
@@ -42,6 +45,20 @@ def corpus_dir(manifest: Manifest) -> Path:
 def corpus_build(manifest: Manifest, corpus_dir: Path) -> list[FileBuild]:
     """The whole corpus, built once per test session."""
     return build_corpus(manifest, corpus_dir)
+
+
+@pytest.fixture(scope="session")
+def ecfr_cache() -> Cache:
+    """eCFR's pages, fetched once a second and kept in eval/ecfr/, so a rerun fetches
+    nothing. eCFR out of reach fails the test with the URL, never a skip."""
+    get = Paced(lambda url: http_get(url, accept_gzip=True), interval=1.0)
+    return Cache(REPO / "eval" / "ecfr", get)
+
+
+@pytest.fixture(scope="session")
+def ecfr_edition(ecfr_cache: Cache) -> dict[str, UnitText]:
+    """The ten parts' units on the edition's day, 1 October 2025."""
+    return edition_units(ecfr_cache)
 
 
 @pytest.fixture

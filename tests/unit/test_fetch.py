@@ -1,12 +1,14 @@
 # Author: Nicola Antonello
 import gzip
 import hashlib
+import urllib.request
 from http.client import IncompleteRead
 from pathlib import Path
+from typing import Self
 
 import pytest
 
-from regulator_graded_rag import __version__
+from regulator_graded_rag import __version__, fetch
 from regulator_graded_rag.fetch import (
     USER_AGENT,
     FetchError,
@@ -133,6 +135,38 @@ def test_a_corrupt_gzip_body_is_a_network_error() -> None:
     for broken in (good[:-10], good[:10] + b"\xff" * 20 + good[30:]):
         with pytest.raises(OSError):
             decoded(broken, "gzip")
+
+
+class _Answer:
+    """A urllib answer: a gzip body, labelled as such."""
+
+    def __init__(self) -> None:
+        self.status = 200
+        self.headers = {"Content-Type": "text/html", "Content-Encoding": "gzip"}
+
+    def read(self) -> bytes:
+        return gzip.compress(b"<html/>")
+
+    def __enter__(self) -> Self:
+        return self
+
+    def __exit__(self, *exc: object) -> None:
+        return None
+
+
+def test_gzip_is_asked_for_only_when_wanted(monkeypatch: pytest.MonkeyPatch) -> None:
+    # eCFR's full-text endpoints answer 406 to a request that does not accept gzip.
+    sent: list[str | None] = []
+
+    class Opener:
+        def open(self, request: urllib.request.Request, timeout: float) -> _Answer:
+            sent.append(request.get_header("Accept-encoding"))
+            return _Answer()
+
+    monkeypatch.setattr(fetch, "_OPENER", Opener())
+    assert fetch.http_get("https://example.com/", accept_gzip=True).body == b"<html/>"
+    assert fetch.http_get("https://example.com/").body == b"<html/>"
+    assert sent == ["gzip", None]
 
 
 def test_requests_name_the_project_and_no_person() -> None:
