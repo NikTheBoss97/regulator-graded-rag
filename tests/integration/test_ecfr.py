@@ -1,7 +1,7 @@
 # Author: Nicola Antonello
 from datetime import date
 
-from regulator_graded_rag.drift import check, parse_citation
+from regulator_graded_rag.drift import check, compare, parse_citation
 from regulator_graded_rag.ecfr import (
     EDITION_DAY,
     Cache,
@@ -82,6 +82,18 @@ def test_known_drift_outcomes(ecfr_cache: Cache) -> None:
 
 def test_a_section_never_amended_since_2017_is_unchanged(ecfr_cache: Cache) -> None:
     assert outcomes(date(2017, 6, 1), ecfr_cache, "171.3") == ["unchanged"]
+
+
+def test_paragraphs_with_content_outside_their_div_are_compared_whole(
+    ecfr_edition: dict[str, UnitText],
+) -> None:
+    # Measured on 2026-11-15: §172.400's label table follows paragraph (b)'s div, and
+    # §176.63 marks its paragraphs on p elements; both compare by the whole section.
+    assert "172.400(b)" in ecfr_edition["172.400"].loose
+    assert ecfr_edition["176.63"].paragraphs == {}
+    assert (
+        compare(parse_citation("176.63(e)"), ecfr_edition, ecfr_edition) == "unchanged"
+    )
 
 
 def test_section_pages_match_the_part_pages(
