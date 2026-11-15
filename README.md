@@ -54,17 +54,23 @@ hand, and its first row will be the BM25 baseline in phase 2.
 
 ## Quickstart
 
-Needs Python 3.14 with uv; the integration tests also need Docker.
+Needs Python 3.14 with uv; the index and the integration tests also need Docker.
 
 ```bash
 uv sync --locked
 uv run python -m regulator_graded_rag.fetch
 uv run python -m regulator_graded_rag.passages
+cp .env.example .env
+docker compose up -d --wait
+uv run --env-file .env python -m regulator_graded_rag.index
 uv run pytest tests/unit
 ```
 
 The build writes the passages to `corpus/parsed/passages.jsonl` and checks that they give
-the passage count and corpus version the manifest records.
+the passage count and corpus version the manifest records. Before starting Postgres,
+choose a password in `.env`, the same in both of its lines: Compose reads it, and the
+index reads `DATABASE_URL` from it. The index is rebuilt only when the corpus version
+changes.
 
 ## Read more
 
