@@ -34,8 +34,12 @@ held-out by a committed seed. This is not compliance or legal advice.
 
 ## Results
 
-None yet. The results table is generated from committed run records, never edited by
-hand, and its first row will be the BM25 baseline in phase 2.
+<!-- results:start -->
+No committed run yet: BM25's first dev run comes with the approved dev questions.
+<!-- results:end -->
+
+`uv run python -m regulator_graded_rag.report` writes this table from the committed run
+records in `eval/runs/`, and a test fails if it is ever edited by hand.
 
 ## How it is evaluated
 
