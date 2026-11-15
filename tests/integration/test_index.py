@@ -40,6 +40,20 @@ def test_every_passage_has_terms_within_postgres_limits(
     assert one(db, f"SELECT max(tf) FROM {test_index}.terms")[0] < 256
 
 
+def test_the_build_leaves_statistics_for_the_planner(db: Conn, test_index: str) -> None:
+    # A fresh one-row stats table is never auto-analyzed, and without its statistics the
+    # planner chose a search plan about five times slower (measured on 2026-11-15).
+    for table in ("passages", "terms", "lengths", "df", "stats"):
+        rows = one(
+            db,
+            f"SELECT reltuples FROM pg_class WHERE oid = '{test_index}.{table}'::regclass",
+        )
+        assert rows[0] >= 0, f"{table} was never analyzed"
+    assert one(
+        db, f"SELECT reltuples FROM pg_class WHERE oid = '{test_index}.stats'::regclass"
+    ) == (1,)
+
+
 def test_a_rebuild_gives_the_same_statistics(
     db: Conn, manifest: Manifest, index_records: list[Record], test_index: str
 ) -> None:
