@@ -86,8 +86,13 @@ class Letter:
 
 
 def letter_year(letter_id: str) -> int:
-    """The reference year: 2000 plus the number's first two digits."""
-    return 2000 + int(letter_id[:2])
+    """The reference year, from the number's first two digits.
+
+    They are read as POSIX reads a two-digit year: 69 to 99 are 1969 to 1999, so the
+    letters numbered 96- to 99- are the 1990s', and 00 to 68 are 2000 to 2068.
+    """
+    two = int(letter_id[:2])
+    return (1900 if two >= 69 else 2000) + two
 
 
 def html_of(data: bytes) -> str:

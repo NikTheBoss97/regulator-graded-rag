@@ -13,6 +13,7 @@ from regulator_graded_rag.letters import (
     Letter,
     fetch_letter,
     index_pages,
+    letter_year,
     load_letters,
     main,
     read_index,
@@ -47,6 +48,13 @@ def test_index_keeps_letter_pages_from_2017_on() -> None:
     ]
     assert captures["26-0001"][0].original.startswith("https://www7.")
     assert counts == Counter({"kept": 3, "outside the years": 1, "other URL shapes": 2})
+
+
+def test_reference_numbers_of_the_1990s_are_read_as_the_1990s() -> None:
+    ids = ("96-0001", "99-0328", "00-0001", "17-0001", "26-0103")
+    assert [letter_year(x) for x in ids] == [1996, 1999, 2000, 2017, 2026]
+    row = [URL.format("99-0328"), "20190101000000", "text/html", "200"]
+    assert read_index([[HEADER, row]]) == ({}, Counter({"outside the years": 1}))
 
 
 def test_resume_keys_are_followed() -> None:
