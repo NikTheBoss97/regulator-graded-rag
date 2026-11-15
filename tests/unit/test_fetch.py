@@ -1,4 +1,5 @@
 # Author: Nicola Antonello
+import gzip
 import hashlib
 from http.client import IncompleteRead
 from pathlib import Path
@@ -6,7 +7,13 @@ from pathlib import Path
 import pytest
 
 from regulator_graded_rag import __version__
-from regulator_graded_rag.fetch import USER_AGENT, FetchError, Response, fetch_file
+from regulator_graded_rag.fetch import (
+    USER_AGENT,
+    FetchError,
+    Response,
+    decoded,
+    fetch_file,
+)
 from regulator_graded_rag.manifest import CorpusFile
 
 XML = b'<?xml version="1.0"?>\n<CFRGRANULE/>\n'
@@ -111,6 +118,12 @@ def test_a_download_cut_off_mid_body_is_retried(tmp_path: Path) -> None:
 
     fetched = fetch_file(FILE, tmp_path, get=cut_off_once, sleep=waits.append)
     assert (fetched, waits) == ("fetched", [2.0])
+
+
+def test_gzip_bodies_are_decompressed() -> None:
+    # The archive replays a page with the Content-Encoding it was captured with.
+    assert decoded(gzip.compress(b"<html/>"), "gzip") == b"<html/>"
+    assert decoded(b"<html/>", None) == b"<html/>"
 
 
 def test_requests_name_the_project_and_no_person() -> None:

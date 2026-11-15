@@ -10,6 +10,7 @@ Exit code 0 when every file matches the manifest, 1 when one cannot be fetched.
 """
 
 import argparse
+import gzip
 import os
 import time
 import urllib.error
@@ -68,6 +69,15 @@ class _NoRedirect(urllib.request.HTTPRedirectHandler):
 _OPENER = urllib.request.build_opener(_NoRedirect)
 
 
+def decoded(body: bytes, encoding: str | None) -> bytes:
+    """The body as the server meant it: decompressed when it came with gzip encoding.
+
+    urllib leaves a compressed body as it is, and the Internet Archive replays a page
+    with the Content-Encoding it was captured with, asked for or not.
+    """
+    return gzip.decompress(body) if encoding == "gzip" else body
+
+
 def http_get(url: str) -> Response:
     """One GET that follows no redirect; any HTTP status comes back as a Response.
 
@@ -78,7 +88,9 @@ def http_get(url: str) -> Response:
     try:
         with _OPENER.open(request, timeout=TIMEOUT_SECONDS) as answer:
             return Response(
-                answer.status, answer.headers.get("Content-Type", ""), answer.read()
+                answer.status,
+                answer.headers.get("Content-Type", ""),
+                decoded(answer.read(), answer.headers.get("Content-Encoding")),
             )
     except urllib.error.HTTPError as err:
         return Response(
