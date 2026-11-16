@@ -269,14 +269,17 @@ reference years 2017 to 2026, listed on 2026-11-14 and 2026-11-15 and read from 
 Internet Archive's copies because PHMSA's site refuses scripts
 ([ADR-0007](adr/0007-letter-items-and-drift-check.md)).
 
-- **An item** is one numbered question whose answer starts with yes or no, cites at
-  least one section, and needs no picture or attachment. It stores an ID made of the
-  letter's reference number and the question number, the letter's date and archive
-  address, the question, the regulator's verdict, the cited sections and paragraphs, a
-  type, and who wrote and checked it. A fixed rule, not a model, turns "You ask
-  whether..." into a direct question.
-- **Types**, first match wins: `unanswerable`, `table` (it cites a table section such as
-  §172.101), `multi_passage` (it cites several sections) and `lookup`.
+- **An item** is a numbered question, or the only question of a letter that numbers
+  none, whose answer starts with yes or no, cites at least one section, and needs no
+  picture or attachment ([ADR-0021](adr/0021-which-letter-questions-become-items.md)).
+  It stores an ID made of the letter's reference number and the question number, the
+  letter's date and archive address, the question, the regulator's verdict, the cited
+  sections and paragraphs, a type, and who wrote and checked it. A fixed rule, not a
+  model, turns "You ask whether X" into "Is it the case that X?", and a §171.8 citation
+  that names a definition compares that definition alone.
+- **Types**, first match wins: `unanswerable`, `table` (it cites a section whose table
+  rows outnumber its text, such as §172.101), `multi_passage` (it cites several sections)
+  and `lookup`.
 - **Rules that changed.** An item is kept only when every paragraph it cites reads the
   same on the letter's date and in the edition, compared by code with eCFR's dated text
   and paragraph IDs. eCFR's dated text starts in 2017, which sets the earliest letter. A
