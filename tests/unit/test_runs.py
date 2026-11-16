@@ -11,6 +11,8 @@ from regulator_graded_rag.gold import Item, gold_version
 from regulator_graded_rag.runs import (
     ResumeMismatch,
     RunExists,
+    freeze,
+    frozen_matches,
     header,
     main,
     run_name,
@@ -319,3 +321,15 @@ def test_run_names_count_up() -> None:
         run_name(date(2026, 11, 20), "bm25", "dev", ["2026-11-20-bm25-dev-1"])
         == "2026-11-20-bm25-dev-2"
     )
+
+
+def test_frozen_items_must_match_their_checksum(tmp_path: Path) -> None:
+    items = tmp_path / "items.jsonl"
+    items.write_text('{"id": "U-1"}\n', encoding="utf-8", newline="\n")
+    frozen = tmp_path / "heldout-items.sha256"
+    assert not frozen_matches(items, frozen)
+    freeze(items, frozen, 1)
+    assert frozen_matches(items, frozen)
+    assert frozen.read_text(encoding="utf-8").split()[0] == gold_version(items)
+    items.write_bytes(items.read_bytes().replace(b"U-1", b"U-2"))
+    assert not frozen_matches(items, frozen)

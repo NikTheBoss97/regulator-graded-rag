@@ -10,6 +10,7 @@ from regulator_graded_rag.gold import (
     gold_version,
     load_items,
     validate,
+    write_items,
 )
 
 GOOD: dict[str, object] = {
@@ -147,3 +148,14 @@ def test_validate_checks_one_record() -> None:
     assert isinstance(validate(GOOD, "x:1"), Item)
     with pytest.raises(ValueError, match="x:1: answer:"):
         validate(GOOD | {"answer": "maybe"}, "x:1")
+
+
+def test_written_items_read_back_the_same(tmp_path: Path) -> None:
+    items = [validate(GOOD, "x:1"), validate(UNANSWERABLE, "x:2")]
+    path = tmp_path / "eval" / "items.jsonl"
+    write_items(path, items)
+    assert load_items(path) == items
+    first = path.read_bytes().split(b"\n")[0]
+    assert list(json.loads(first)) == sorted(json.loads(first))
+    assert b"\r" not in path.read_bytes()
+    assert not path.with_name("items.jsonl.part").exists()

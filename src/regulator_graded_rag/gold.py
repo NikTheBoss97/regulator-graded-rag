@@ -9,9 +9,10 @@ file's bytes, so any change to any item changes it.
 
 import hashlib
 import json
+import os
 import re
-from collections.abc import Mapping
-from dataclasses import dataclass, fields
+from collections.abc import Iterable, Mapping
+from dataclasses import asdict, dataclass, fields
 from datetime import date
 from pathlib import Path
 from typing import Any, NoReturn
@@ -150,6 +151,19 @@ def load_items(path: Path) -> list[Item]:
                 seen.add(item.id)
                 items.append(item)
     return items
+
+
+def write_items(path: Path, items: Iterable[Item]) -> None:
+    """One JSON object per item and line, sorted keys and LF, written whole or not at
+    all, so the file's SHA-256 depends on the items alone."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    lines = "".join(
+        json.dumps(asdict(item), sort_keys=True, ensure_ascii=False) + "\n"
+        for item in items
+    )
+    part = path.with_name(path.name + ".part")
+    part.write_text(lines, encoding="utf-8", newline="\n")
+    os.replace(part, path)
 
 
 def gold_version(path: Path) -> str:

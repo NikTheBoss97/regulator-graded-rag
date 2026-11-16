@@ -15,7 +15,8 @@ A run is one folder, eval/runs/<YYYY-MM-DD>-<retriever>-<split>-<n>/:
 - scores.json, recomputed from the stored hits.
 Every item is searched, unanswerable ones included, and only answerable items are
 scored. A run stopped midway, by closing the laptop, resumes with the settings it started
-with. Held-out runs are started by the owner only (ADR-0014).
+with. Held-out runs are started by the owner only, and read only the frozen items, whose
+SHA-256 eval/heldout-items.sha256 records (ADR-0014).
 Exit code 0 when the run is complete and scored, 1 when it cannot run, and 2 for a
 held-out run without the owner's flag.
 """
@@ -50,6 +51,7 @@ GOLD = {
     "dev": Path("eval/dev/items.jsonl"),
     "heldout": Path("eval/heldout/items.jsonl"),
 }
+FROZEN = Path("eval/heldout-items.sha256")
 
 # A stopped run resumes only when these are what it started with.
 _SAME = (
@@ -72,6 +74,26 @@ class RunExists(Exception):
 
 class ResumeMismatch(Exception):
     """A stopped run resumes only with what it started with."""
+
+
+def freeze(items: Path, frozen: Path, count: int) -> None:
+    """Record the items file's SHA-256 and its count of items: the held-out freeze."""
+    frozen.parent.mkdir(parents=True, exist_ok=True)
+    frozen.write_text(
+        f"{gold_version(items)}  {items.as_posix()}\nitems: {count}\n",
+        encoding="utf-8",
+        newline="\n",
+    )
+
+
+def frozen_matches(items: Path, frozen: Path) -> bool:
+    """Whether the items file is the frozen one: its SHA-256 opens the frozen file.
+    When nothing is frozen, nothing matches."""
+    try:
+        words = frozen.read_text(encoding="utf-8").split()
+    except FileNotFoundError:
+        return False
+    return bool(words) and words[0] == gold_version(items)
 
 
 def git_state(repo: Path) -> tuple[str, bool]:
@@ -344,6 +366,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(
             f"{gold.as_posix()} holds {other.id} of the {other.split} split,"
             f" not {args.split}: a run reads only its own split's items"
+        )
+        return 1
+    if args.split == "heldout" and not frozen_matches(gold, FROZEN):
+        print(
+            f"{gold.as_posix()} does not match {FROZEN.as_posix()}: a held-out run"
+            " reads only the frozen items (ADR-0014)"
         )
         return 1
     runs: Path = args.runs
