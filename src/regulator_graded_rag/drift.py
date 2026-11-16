@@ -27,7 +27,7 @@ from regulator_graded_rag.ecfr import (
 
 CITATION = re.compile(
     r"(\d{3}\.\d+[a-z]?(?:-\d+)?|\d{3}\.(?:subpt[A-Z]+\.)?app[A-Z])"
-    r"((?:\([0-9A-Za-z]+\))*)"
+    r"((?:\([0-9A-Za-z%.\-]+\))*)"
 )
 Outcome = Literal["unchanged", "changed", "missing"]
 

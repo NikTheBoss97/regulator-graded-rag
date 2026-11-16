@@ -78,3 +78,9 @@ def test_a_section_absent_on_the_letters_day_is_missing(tmp_path: Path) -> None:
 
     cited = Citation("173.9", "(a)")
     assert check([cited], date(2017, 6, 1), Cache(tmp_path, get)) == {cited: "missing"}
+
+
+def test_a_definition_key_is_a_citation() -> None:
+    assert parse_citation("171.8(Hazmat%20employee)") == Citation(
+        "171.8", "(Hazmat%20employee)"
+    )

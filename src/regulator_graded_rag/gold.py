@@ -20,7 +20,7 @@ EDITION = "2025"
 ITEM_ID = re.compile(r"\d{2}-\d{4}-Q\d+|U-\d+")
 # The passage builder's unit keys, plus paragraph designators.
 EVIDENCE = re.compile(
-    r"\d{3}\.(?:\d+[a-z]?(?:-\d+)?|(?:subpt[A-Z]+\.)?app[A-Z])(?:\([0-9A-Za-z]+\))*"
+    r"\d{3}\.(?:\d+[a-z]?(?:-\d+)?|(?:subpt[A-Z]+\.)?app[A-Z])(?:\([0-9A-Za-z%.\-]+\))*"
 )
 SPLITS = ("dev", "heldout")
 

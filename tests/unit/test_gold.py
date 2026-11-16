@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from regulator_graded_rag.gold import gold_version, load_items
+from regulator_graded_rag.gold import EVIDENCE, gold_version, load_items
 
 GOOD: dict[str, object] = {
     "id": "99-0001-Q1",
@@ -129,3 +129,9 @@ def test_the_gold_version_changes_with_any_byte(tmp_path: Path) -> None:
     before = gold_version(path)
     path.write_bytes(path.read_bytes().replace(b"yes", b"no "))
     assert gold_version(path) != before and len(before) == 64
+
+
+def test_a_definition_key_is_an_evidence_label() -> None:
+    # eCFR keys a definition of section 171.8 by its term (plan 2c, Decision 3).
+    assert EVIDENCE.fullmatch("171.8(Non-bulk%20packaging)")
+    assert EVIDENCE.fullmatch("171.8(Self-defense%20spray)(1)")
