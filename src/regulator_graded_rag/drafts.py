@@ -18,6 +18,7 @@ a held-out run without the owner's flag.
 
 import argparse
 import json
+import os
 import time
 from collections import Counter
 from collections.abc import Iterable, Mapping, Sequence
@@ -187,9 +188,10 @@ def drift_draft(draft: Draft, cache: Cache) -> Draft:
 
 
 def write_drafts(path: Path, drafts: Iterable[Draft]) -> None:
-    """One JSON object per draft and line, sorted keys, LF. An unkept draft is written
-    without its question, since the owner checks only kept ones and no unchecked letter
-    text may reach git (owner, 2026-11-16)."""
+    """One JSON object per draft and line, sorted keys, LF, written whole or not at
+    all, since the review page rewrites the file during the owner's check. An unkept
+    draft is written without its question, since the owner checks only kept ones and
+    no unchecked letter text may reach git (owner, 2026-11-16)."""
     path.parent.mkdir(parents=True, exist_ok=True)
     lines = "".join(
         json.dumps(
@@ -200,7 +202,9 @@ def write_drafts(path: Path, drafts: Iterable[Draft]) -> None:
         + "\n"
         for draft in drafts
     )
-    path.write_text(lines, encoding="utf-8", newline="\n")
+    part = path.with_name(path.name + ".part")
+    part.write_text(lines, encoding="utf-8", newline="\n")
+    os.replace(part, path)
 
 
 def load_drafts(path: Path) -> list[Draft]:

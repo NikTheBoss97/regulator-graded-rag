@@ -10,6 +10,7 @@ file's bytes, so any change to any item changes it.
 import hashlib
 import json
 import re
+from collections.abc import Mapping
 from dataclasses import dataclass, fields
 from datetime import date
 from pathlib import Path
@@ -121,6 +122,12 @@ def _checked(record: dict[str, Any], where: str, seen: set[str]) -> Item:
     if record["edition"] != EDITION:
         refuse("edition", f"{record['edition']!r} is not {EDITION}")
     return Item(**(record | {"evidence": tuple(record["evidence"])}))
+
+
+def validate(record: Mapping[str, object], where: str) -> Item:
+    """One record as an item, by the checks load_items makes on each line; a broken
+    rule is refused with where, the field and why."""
+    return _checked(dict(record), where, set())
 
 
 def load_items(path: Path) -> list[Item]:

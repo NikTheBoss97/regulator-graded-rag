@@ -4,7 +4,13 @@ from pathlib import Path
 
 import pytest
 
-from regulator_graded_rag.gold import EVIDENCE, gold_version, load_items
+from regulator_graded_rag.gold import (
+    EVIDENCE,
+    Item,
+    gold_version,
+    load_items,
+    validate,
+)
 
 GOOD: dict[str, object] = {
     "id": "99-0001-Q1",
@@ -135,3 +141,9 @@ def test_a_definition_key_is_an_evidence_label() -> None:
     # eCFR keys a definition of section 171.8 by its term (plan 2c, Decision 3).
     assert EVIDENCE.fullmatch("171.8(Non-bulk%20packaging)")
     assert EVIDENCE.fullmatch("171.8(Self-defense%20spray)(1)")
+
+
+def test_validate_checks_one_record() -> None:
+    assert isinstance(validate(GOOD, "x:1"), Item)
+    with pytest.raises(ValueError, match="x:1: answer:"):
+        validate(GOOD | {"answer": "maybe"}, "x:1")
