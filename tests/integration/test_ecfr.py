@@ -4,6 +4,7 @@ from datetime import date
 from regulator_graded_rag.drift import check, compare, parse_citation
 from regulator_graded_rag.ecfr import (
     EDITION_DAY,
+    KNOWN_DIFFERENCES,
     Cache,
     UnitText,
     characters,
@@ -11,21 +12,6 @@ from regulator_graded_rag.ecfr import (
 )
 from regulator_graded_rag.parse_checks import reference_characters
 from regulator_graded_rag.passages import FileBuild, Unit
-
-# Units whose eCFR text differs from the corpus's, each with the owner's dated ruling.
-# Plan 2c brings an item citing one of them to the owner, flagged.
-KNOWN_DIFFERENCES: dict[str, str] = {
-    "180.209": (
-        "eCFR shows Table 1 to paragraph (a) twice, while the printed edition (page"
-        " 335) and the corpus show it once, with the same 16 rows; eCFR is wrong, a"
-        " known difference (owner, 2026-11-15)"
-    ),
-    "180.407": (
-        "eCFR prints the heading of paragraph (g)(1) as 'Test Procedure—', while the"
-        " printed edition (page 360) and the corpus read 'Test procedure.'; eCFR is"
-        " wrong, a known difference (owner, 2026-11-15)"
-    ),
-}
 
 
 def govinfo(unit: Unit) -> tuple[str, str]:
