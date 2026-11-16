@@ -112,6 +112,10 @@ letters stay eligible for held-out.
   - figures are compared by their file names.
 
   The comparison with the corpus stays text-only.
+- 2026-11-16: [ADR-0021](0021-which-letter-questions-become-items.md) supersedes the
+  first line of the Decision: a letter's only unnumbered question can be an item too. It
+  also records how the question is rewritten, how citations are read, how a §171.8
+  definition is compared and how a table section is decided.
 
 ## References
 
