@@ -2,8 +2,9 @@
 
 # Security
 
-Keeping retrieved text from acting as instructions, and keeping the corpus and model files
-trustworthy. Part of the [reading list](README.md).
+Keeping retrieved text from acting as instructions, keeping the corpus and model files
+trustworthy, and keeping the owner's review page to this machine. Part of the
+[reading list](README.md).
 
 ## Prompt injection
 
@@ -17,3 +18,9 @@ trustworthy. Part of the [reading list](README.md).
 - Hugging Face, [Safetensors](https://huggingface.co/docs/safetensors/index) (Hugging Face documentation). A simple format for storing tensors safely, unlike pickle, so loading weights runs no code.
 - Python, [XML Processing Modules](https://docs.python.org/3.14/library/xml.html) (Python documentation), section "XML security". Expat before 2.7.2 may be open to entity-expansion and large-token attacks, so a test pins the minimum version the passage builder parses with.
 - Wei Zou, Runpeng Geng, Binghui Wang and Jinyuan Jia, [PoisonedRAG: Knowledge Corruption Attacks to Retrieval-Augmented Generation of Large Language Models](https://www.usenix.org/conference/usenixsecurity25/presentation/zou-poisonedrag) (USENIX Security, 2025). Attacks that plant malicious texts in the knowledge database. Why the corpus is pinned by checksums.
+
+## The review page
+
+- OWASP, [Cross-Site Request Forgery Prevention Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html) (OWASP Cheat Sheet Series). Why a form needs a secret token for each session: the review page's defense against another site posting a decision.
+- MDN, [Content-Security-Policy (CSP) header](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Content-Security-Policy) (MDN Web Docs). The header that lets the review page load nothing from elsewhere, sit in no frame and post only to itself.
+- Python, [http.server — HTTP servers](https://docs.python.org/3.14/library/http.server.html) (Python documentation). The standard library's server, which implements only basic security checks, so the review page binds 127.0.0.1 alone and adds its own.
