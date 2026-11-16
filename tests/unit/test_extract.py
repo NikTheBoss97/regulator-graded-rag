@@ -137,6 +137,38 @@ def test_only_an_answer_that_starts_with_yes_or_no_has_a_verdict(
         ),
         ("You ask whether X is allowed. You further ask whether Y is.", None),
         ("In your letter you ask whether the tank is empty.", None),
+        # Two questions in one, as in dev letter 19-0130: the draft is flagged.
+        (
+            "You ask whether a leg is by vessel and, if so, whether Part 176 applies.",
+            None,
+        ),
+        ("You ask whether X is allowed and, if not, whether Y is.", None),
+        (
+            "You ask whether a leg is by vessel and—if so—whether Part 176 applies.",
+            None,
+        ),
+        (
+            "You ask whether a package if not marked may be shipped.",
+            "Is it the case that a package if not marked may be shipped?",
+        ),
+        # A quoted ending keeps its quote but not its period (dev letter 21-0020);
+        # a quotation's own mark, and an abbreviation's period, stay.
+        (
+            'You ask whether it is an "unsafe condition."',
+            'Is it the case that it is an "unsafe condition"?',
+        ),
+        (
+            'You ask whether the label must read "Is it flammable?"',
+            'Is it the case that the label must read "Is it flammable?"?',
+        ),
+        (
+            'You ask whether it must bear the word "DANGER!"',
+            'Is it the case that it must bear the word "DANGER!"?',
+        ),
+        (
+            'You ask whether it may be marked "MADE IN U.S."',
+            'Is it the case that it may be marked "MADE IN U.S."?',
+        ),
     ],
 )
 def test_the_fixed_rule_makes_a_direct_question(
@@ -166,6 +198,48 @@ def test_pictures_and_samples_are_noticed() -> None:
     assert mentions_picture("You provide photos of the package.")
     assert mentions_picture("x", "a sample bottle")
     assert not mentions_picture("The marking reads UN1993.")
+    # What the requester showed or sent, as in dev letters 25-0074 and 25-0087, needs
+    # the owner's look too.
+    assert mentions_picture("The shipping paper, as shown in your incoming email, x.")
+    assert mentions_picture("the test report example included with your email")
+    assert not mentions_picture("The placard is the one shown in § 172.555.")
+
+
+@pytest.mark.parametrize(
+    "opening",
+    [
+        "This is in response to your email",
+        "This responds to your letter",
+        "This letter is in response to your email",
+    ],
+)
+def test_the_letters_opening_sentence_is_not_part_of_the_question(
+    opening: str,
+) -> None:
+    paragraphs = (
+        (
+            f"{opening} requesting clarification of the HMR. You ask whether the bins"
+            " may keep the mark."
+        ),
+        "Yes. In accordance with § 172.303(b)(1), the prohibition does not apply.",
+    )
+    [pair] = pairs(paragraphs)
+    assert pair.question == "You ask whether the bins may keep the mark."
+
+
+@pytest.mark.parametrize(
+    "asking",
+    [
+        # An opening that asks the question itself stays, or no question is left.
+        "This responds to your letter in which you ask whether the bins may keep it.",
+        # A first sentence that starts with "This" but opens no letter stays.
+        "This cylinder holds propane. You ask whether the bins may keep the mark.",
+    ],
+)
+def test_a_first_sentence_that_is_not_the_letters_opening_stays(asking: str) -> None:
+    answer = "Yes. In accordance with § 172.303(b)(1), the prohibition does not apply."
+    [pair] = pairs((asking, answer))
+    assert pair.question == asking
 
 
 @pytest.mark.parametrize(
@@ -181,12 +255,55 @@ def test_pictures_and_samples_are_noticed() -> None:
             "Therefore, you ask whether it may be shipped.",
             "Is it the case that it may be shipped?",
         ),
+        (
+            "In the case of a cylinder, you ask whether it may be shipped.",
+            "In the case of a cylinder, is it the case that it may be shipped?",
+        ),
+        # Starting like a pointer to a letter does not make a phrase one.
+        (
+            "In your scenario, where the tank is empty, you ask whether it may be shipped.",
+            (
+                "In your scenario, where the tank is empty, is it the case that it may be"
+                " shipped?"
+            ),
+        ),
+        (
+            "In connection with shipments by vessel, you ask whether it may be shipped.",
+            (
+                "In connection with shipments by vessel, is it the case that it may be"
+                " shipped?"
+            ),
+        ),
+        # A pointer with more after it is no longer only a pointer, so all of it stays.
+        (
+            "In your letter about empty tanks, you ask whether it may be shipped.",
+            "In your letter about empty tanks, is it the case that it may be shipped?",
+        ),
+        # A pointer to another question stays: it tells the owner the question leans
+        # on that one (dev letter 24-0010).
+        (
+            "In connection to question Q1, you ask whether it may be shipped.",
+            "In connection to question Q1, is it the case that it may be shipped?",
+        ),
     ],
 )
 def test_a_condition_before_the_question_stays(
     question: str, expected: str | None
 ) -> None:
     assert direct(question) == expected
+
+
+@pytest.mark.parametrize(
+    "pointer",
+    [
+        "In your most recent letter",  # dev letter 23-0034
+        "In your letter",
+        "In your email dated May 5, 2019",
+    ],
+)
+def test_a_pointer_to_the_requesters_letter_goes(pointer: str) -> None:
+    question = f"{pointer}, you ask whether it may be shipped."
+    assert direct(question) == "Is it the case that it may be shipped?"
 
 
 def test_an_answer_runs_to_the_next_question() -> None:

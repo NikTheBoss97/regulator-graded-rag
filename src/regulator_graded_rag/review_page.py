@@ -92,7 +92,8 @@ _HINTS = {
     ),
     "scrubbed": "Names, emails or phone numbers were removed: check that none is left.",
     "unnumbered": (
-        "The letter numbers no question: check that the answer is this question's."
+        "The letter numbers no question: check that the answer is this question's,"
+        " and that the question still names its subject without the letter's opening."
     ),
     "answer continues": (
         "The answer's later paragraphs add citations: keep only the answer's own."

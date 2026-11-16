@@ -107,6 +107,26 @@ requester speaks again.
 - The fixed rule reads stiffly, but it never garbles a question. A question it cannot
   rewrite reaches the owner flagged, never silently.
 
+## Amendments
+
+- 2026-11-16: Measured on the 240 kept dev drafts before the owner's check, five rules
+  were refined. Together they touch 12 drafts, and the extractor became version 2.
+  - A phrase that is only a pointer to the requester's letters ("In your most recent
+    letter,", "In your email dated May 5, 2019,") goes, like a discourse marker. A
+    phrase that goes on past the pointer stays whole, and so does a pointer to another
+    question ("In connection to question Q1,"), which tells the owner the question
+    leans on that one.
+  - A letter's opening sentence leaves the question whether it reads "This letter is in
+    response to…", "This is in response to…" or "This responds to…", unless it asks
+    the question itself.
+  - A quoted ending loses the period before its closing quote, so the question ends
+    `an "unsafe condition"?`. A quotation's own "?" or "!", and an abbreviation's
+    period, stay.
+  - "…and, if so, whether…", "…and, if not, …" and "…and—if so—…" ask a second
+    question, so the question is kept as written and flagged.
+  - What the requester showed or sent ("as shown in your incoming email", "the example
+    included with your email") is flagged with the pictures.
+
 ## References
 
 - eCFR, [API documentation](https://www.ecfr.gov/developers/documentation/api/v1), whose
