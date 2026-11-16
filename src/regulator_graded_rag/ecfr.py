@@ -36,6 +36,20 @@ PARTS = tuple(str(p) for p in range(171, 181))
 ECFR_INTERVAL = 1.0
 DEFAULT_CACHE = Path("eval/ecfr")
 APPENDIX_ID = re.compile(r"Appendix-([A-Z])-to-(?:Subpart-([A-Z])-of-)?Part-(\d+)")
+# Units whose eCFR text differs from the corpus's, each with the owner's dated ruling.
+# A draft citing one of them is flagged for the owner's check.
+KNOWN_DIFFERENCES: dict[str, str] = {
+    "180.209": (
+        "eCFR shows Table 1 to paragraph (a) twice, while the printed edition (page"
+        " 335) and the corpus show it once, with the same 16 rows; eCFR is wrong, a"
+        " known difference (owner, 2026-11-15)"
+    ),
+    "180.407": (
+        "eCFR prints the heading of paragraph (g)(1) as 'Test Procedure—', while the"
+        " printed edition (page 360) and the corpus read 'Test procedure.'; eCFR is"
+        " wrong, a known difference (owner, 2026-11-15)"
+    ),
+}
 _HEADINGS = frozenset({"h1", "h2", "h3", "h4", "h5", "h6"})
 # Text from different blocks is joined with a space.
 _BLOCKS = frozenset({"p", "div", "td", "th", "tr", "li"}) | _HEADINGS
