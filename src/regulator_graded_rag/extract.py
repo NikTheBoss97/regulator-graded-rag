@@ -18,7 +18,7 @@ from typing import Literal
 
 from regulator_graded_rag.letter_page import LetterPage
 
-EXTRACTOR = "1"
+EXTRACTOR = "2"
 Verdict = Literal["yes", "no"]
 DateSource = Literal["letter", "published", "none"]
 
@@ -35,7 +35,12 @@ _YOU_ASK = re.compile(
     re.IGNORECASE,
 )
 _AND_ASK = re.compile(r"\s+and\s+(?:also\s+)?ask\s+(?:whether|if)\s+", re.IGNORECASE)
-_RESPONSE = re.compile(r"^This letter is in response to\b", re.IGNORECASE)
+# "X and, if so, whether Y", "…and, if not, …" or "…and—if so—…" asks a second
+# question, which the yes or no may not answer.
+_IF_SO = re.compile(r"\bif (?:so|not)\s*[,—–]", re.IGNORECASE)
+_RESPONSE = re.compile(
+    r"^This (?:letter )?(?:is in response to|responds to)\b", re.IGNORECASE
+)
 # The paragraphs that end an answer's last paragraphs: the letter's closing.
 _CLOSING = re.compile(
     r"^\s*(?:I hope (?:that )?this information|If you have (?:any )?(?:further |"
@@ -52,8 +57,9 @@ _CONTEXT = re.compile(
     r"provided?|inquired?|wr(?:ite|ote)))\b",
     re.IGNORECASE,
 )
-# Words before a "you ask" clause that only join it to the text before; any other
-# comma-ended phrase is a condition of the question and stays.
+# Words before a "you ask" clause that only join it to the text before. Any other
+# comma-ended phrase, except a pointer to the requester's letter (_FRAMING), is a
+# condition of the question and stays.
 _DISCOURSE = frozenset(
     {
         "specifically",
@@ -73,15 +79,20 @@ _DISCOURSE = frozenset(
         "additionally",
         "moreover",
         "in addition",
-        "in your email",
-        "in your letter",
-        "in your request",
-        "in your inquiry",
     }
+)
+# A phrase that is only a pointer to the requester's letters frames the question, so
+# it goes too: "In your most recent letter,", "In your email dated May 5, 2019,". The
+# whole phrase must be the pointer, so a condition after it stays; a pointer to another
+# question stays as well, since it tells the owner the question leans on that one.
+_FRAMING = re.compile(
+    r"in your (?:[\w-]+ ){0,3}(?:letter|e-?mail|request|inquiry|correspondence|"
+    r"message)s?(?: dated [\w ]+ \d{1,2}, \d{4})?",
+    re.IGNORECASE,
 )
 _PICTURE = re.compile(
     r"\b(?:pictures?|photo\w*|images?|attach\w*|enclos\w*|samples?|drawings?|"
-    r"diagrams?|illustrat\w*|videos?)\b",
+    r"diagrams?|illustrat\w*|videos?|shown (?:in|on) your|included with your)\b",
     re.IGNORECASE,
 )
 # A sentence ends at ".", "?" or "!" (perhaps before a closing quote) followed by a
@@ -187,7 +198,8 @@ def pairs(paragraphs: Sequence[str]) -> list[Pair]:
         return []
     more = _following(paragraphs, asking[0] + 1)
     sentences = _sentences(paragraphs[asking[0]])
-    if sentences and _RESPONSE.match(sentences[0]):
+    # The letter's opening sentence goes, unless it asks the question itself.
+    if sentences and _RESPONSE.match(sentences[0]) and not _asks(sentences[0]):
         sentences = sentences[1:]
     answer = "\n".join([first, *more])
     return [Pair(1, " ".join(sentences), answer, False, bool(more))]
@@ -195,12 +207,15 @@ def pairs(paragraphs: Sequence[str]) -> list[Pair]:
 
 def direct(question: str) -> str | None:
     """The question as a direct question, by the fixed rule; None when no rule applies,
-    or when the text holds more than one asking clause, or words before a "you ask"
-    clause that do not end in a comma. A discourse marker before the clause goes; any
-    other comma-ended phrase is a condition and stays ("For X, is it the case that Y?")."""
+    or when the text holds more than one asking clause or a second question ("…and, if
+    so, whether…"), or words before a "you ask" clause that do not end in a comma. A
+    discourse marker before the clause goes, as does a pointer to the requester's
+    letter; any other comma-ended phrase is a condition and stays ("For X, is it the
+    case that Y?")."""
     sentences = _sentences(question)
-    if _asks(question) != 1:
-        if _asks(question) == 0 and question.rstrip().endswith("?"):
+    asks = _asks(question)
+    if asks != 1 or _IF_SO.search(question):
+        if asks == 0 and question.rstrip().endswith("?"):
             return question
         return None
     for i, sentence in enumerate(sentences):
@@ -211,11 +226,20 @@ def direct(question: str) -> str | None:
         match = you or joined
         assert match is not None
         before = sentence[: match.start()].strip()
-        asked = sentence[match.end() :].rstrip().rstrip(".?!").rstrip()
+        asked = sentence[match.end() :].rstrip()
+        # The closing period goes, even inside a closing quote ('an "X."' ends 'an
+        # "X"?'), but a quotation's own "?" or "!" and an abbreviation's period stay.
+        if not asked.rstrip('"”’').endswith(_ABBREVIATIONS):
+            asked = re.sub(r"\.(?=[\"”’]$)|[.?!]+$", "", asked).rstrip()
         if you is not None:
             if before and not before.endswith(","):
                 return None
-            if before and before[:-1].strip().lower() not in _DISCOURSE:
+            phrase = before[:-1].strip()
+            if (
+                before
+                and phrase.lower() not in _DISCOURSE
+                and not _FRAMING.fullmatch(phrase)
+            ):
                 rewritten = f"{before} is it the case that {asked}?"
             else:
                 rewritten = f"Is it the case that {asked}?"
@@ -241,5 +265,6 @@ def letter_date(page: LetterPage) -> tuple[date | None, DateSource]:
 
 def mentions_picture(*texts: str) -> bool:
     """Whether any text mentions a picture, photo, image, attachment, enclosure, sample,
-    drawing, diagram, illustration or video, for the owner to judge."""
+    drawing, diagram, illustration or video, or something the requester showed or sent
+    ("shown in your…", "included with your…"), for the owner to judge."""
     return any(_PICTURE.search(text) for text in texts)

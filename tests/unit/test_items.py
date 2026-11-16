@@ -106,7 +106,7 @@ def test_an_edited_date_or_evidence_is_checked_again() -> None:
 def test_items_carry_who_wrote_and_verified_them() -> None:
     built, _ = build([A], latest([decided(A, "approve")]), [], always)
     assert (built[0].written_by, built[0].verified) == (
-        "PHMSA, extractor 1",
+        "PHMSA, extractor 2",
         "owner, 2026-11-20",
     )
 
