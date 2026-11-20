@@ -62,9 +62,10 @@ def build(
     recheck, and written by the owner. Every kept draft needs a decision on it as it now
     reads, except the audit's: a pool draft outside the sample, while fewer than two
     sampled drafts have changed, may instead have a read, and then code's checks verify
-    it. An approval keeps the draft as drafted and an edit keeps the edited fields; an
-    item whose date or evidence was edited must pass recheck, and every item the gold
-    checks."""
+    it. The undecided drafts are named before the unread ones, since the read opens
+    only once the sample is decided. An approval keeps the draft as drafted and an edit
+    keeps the edited fields; an item whose date or evidence was edited must pass
+    recheck, and every item the gold checks."""
     kept = [draft for draft in drafts if draft.kept]
     current = {
         draft.id: str(decisions[draft.id].get("action"))
@@ -74,23 +75,23 @@ def build(
     readable: set[str] = set()
     if audit is not None and changed(audit, current) < 2:
         readable = set(audit.pool) - set(audit.sample)
+    undecided = [
+        draft.id
+        for draft in kept
+        if current.get(draft.id) not in ("approve", "edit", "reject")
+        and not (draft.id in readable and current.get(draft.id) in ("read", None))
+    ]
+    if undecided:
+        raise ValueError(
+            f"{len(undecided)} undecided, with no decision on the draft as it now"
+            f" reads: {_shown(undecided)}"
+        )
     unread = [
         draft.id for draft in kept if draft.id in readable and draft.id not in current
     ]
     if unread:
         raise ValueError(
             f"{len(unread)} not yet read for personal data: {_shown(unread)}"
-        )
-    undecided = [
-        draft.id
-        for draft in kept
-        if current.get(draft.id) not in ("approve", "edit", "reject")
-        and not (current.get(draft.id) == "read" and draft.id in readable)
-    ]
-    if undecided:
-        raise ValueError(
-            f"{len(undecided)} undecided, with no decision on the draft as it now"
-            f" reads: {_shown(undecided)}"
         )
     counts: Counter[str] = Counter()
     built: list[Item] = []
@@ -183,6 +184,11 @@ def main(argv: Sequence[str] | None = None) -> int:
             raise ValueError(f"{stray} belongs to another split than {args.split}")
         path = AUDIT[args.split]
         audit = load_audit(path) if path.is_file() else None
+        if audit is not None and audit.split != args.split:
+            raise ValueError(
+                f"{path.as_posix()} is the audit of the {audit.split} split, not of"
+                f" {args.split}"
+            )
         built, counts = build(
             drafts, decisions, owners, _recheck(default_cache()), audit
         )

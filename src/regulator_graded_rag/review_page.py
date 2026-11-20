@@ -538,7 +538,8 @@ def render_read(drafts: Sequence[Draft], token: str) -> str:
 
 class _Review(ThreadingHTTPServer):
     """The page's server, with the drafts still to check and where decisions go. units
-    are the corpus's, in corpus order."""
+    are the corpus's, in corpus order, and actions each draft's current action, as
+    current_actions reads it from the decisions file."""
 
     daemon_threads = True
 
@@ -553,13 +554,14 @@ class _Review(ThreadingHTTPServer):
         units: Iterable[str],
         letter: Callable[[Draft], LetterPage | None],
         audit: Audit,
+        actions: Mapping[str, str],
     ) -> None:
         super().__init__(("127.0.0.1", port), _Handler)
         self.port = int(self.server_address[1])  # the bound one, when port is 0
         self.token = token
         self.drafts = {draft.id: draft for draft in all_drafts}
         self.audit = audit
-        self.actions = current_actions(all_drafts, decisions)
+        self.actions = dict(actions)
         self.queue = to_check(all_drafts, self.actions, audit)
         self.reading = to_read(all_drafts, self.actions, audit)
         self.drafts_file = drafts
@@ -856,10 +858,19 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         drafts = load_drafts(drafts_file)
         audit = load_audit(audit_file)
+        if audit.split != args.split:
+            raise ValueError(
+                f"{audit_file.as_posix()} is the audit of the {audit.split} split, not"
+                f" of {args.split}"
+            )
+        actions = current_actions(drafts, decisions)
         splits = load_split(SPLIT_FILE)
         records = read_passages(DEFAULT_OUT, load_manifest(DEFAULT_MANIFEST))
     except FileNotFoundError as err:
         print(f"{err.filename} is missing")
+        return 1
+    except OSError as err:
+        print(f"{err.filename} cannot be read: {err.strerror}")
         return 1
     except (KeyError, TypeError, ValueError) as err:
         print(f"an input is wrong: {err!r}")
@@ -877,6 +888,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             units,
             _letters(splits),
             audit,
+            actions,
         )
     except OSError as err:
         print(f"port {args.port}: {err.strerror}")

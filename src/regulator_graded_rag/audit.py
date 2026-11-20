@@ -179,7 +179,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     write_audit(out, drawn)
     print(
         f"pool {len(drawn.pool)}, sample {len(drawn.sample)},"
-        f" to the owner {len(undecided) - len(drawn.pool)}"
+        f" with a reason {len(undecided) - len(drawn.pool)}"
     )
     return 0
 

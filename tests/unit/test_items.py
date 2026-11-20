@@ -218,6 +218,14 @@ def test_an_unread_pool_draft_stops_the_build() -> None:
         build([A, B], latest([decided(A, "approve")]), [], always, audit)
 
 
+def test_an_undecided_sample_is_named_before_the_read() -> None:
+    # The read opens only once the sample is decided, so the sample comes first.
+    audit = audited([A, B], [A])
+    with pytest.raises(ValueError, match="1 undecided") as caught:
+        build([A, B], latest([]), [], always, audit)
+    assert B.id not in str(caught.value)
+
+
 def test_two_changes_need_a_decision_on_every_pool_draft() -> None:
     audit = audited([A, B, C], [A, B])
     decisions = latest(
@@ -280,3 +288,16 @@ def test_a_whole_pool_audit_prints_no_bound(
     assert items.main(["--split", "dev"]) == 0
     out = capsys.readouterr().out
     assert "the owner checked the whole pool" in out
+
+
+def test_the_build_refuses_another_splits_audit(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    other = replace(audited([A, B], [A]), split="heldout")
+    _audited_build(tmp_path, monkeypatch, other, "read")
+    assert items.main(["--split", "dev"]) == 1
+    out = capsys.readouterr().out
+    assert "eval/dev/audit.json is the audit of the heldout split, not of dev" in out
+    assert not (tmp_path / "eval" / "dev" / "items.jsonl").exists()
