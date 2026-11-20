@@ -4,7 +4,13 @@
 Usage: python -m regulator_graded_rag.review_page --split {dev,heldout}
 [--heldout-by-owner] [--port 8765], from the repository root.
 
-The page shows one kept draft at a time, oldest letter first, beside the letter's text.
+The page shows only the drafts the owner must judge (ADR-0022): those with a reason from
+the checks, and the audit's sample of the drafts code accepted, which is drawn first
+with python -m regulator_graded_rag.audit --split <split> --draw. Two changes in the
+sample send the whole pool. It shows one draft at a time, oldest letter first, with each
+reason as a question, what code confirmed, and the letter's question and answer before
+the letter, which is folded. Buttons add the letter's context to the question, by fixed
+rules, and save nothing.
 Approve keeps the draft as drafted, Save edits keeps the owner's corrections, and Reject
 drops it. Each decision is appended to the split's decisions file at once, with the
 digest of the draft it decides, so a draft extracted again is checked again. A rejected
@@ -38,12 +44,21 @@ from pathlib import Path
 from typing import Literal, cast
 from urllib.parse import parse_qs, quote, urlsplit
 
+from regulator_graded_rag.audit import AUDIT, Audit, changed, load_audit
+from regulator_graded_rag.checks import (
+    context_after,
+    context_before,
+    opening,
+    pair_of,
+    reasons,
+    ticks,
+)
 from regulator_graded_rag.citations import Cited, item_type, table_units
 from regulator_graded_rag.drafts import DRAFTS, Draft, load_drafts, write_drafts
 from regulator_graded_rag.extract import EXTRACTOR
 from regulator_graded_rag.gold import EDITION, validate
 from regulator_graded_rag.index import read_passages
-from regulator_graded_rag.letter_page import read_page
+from regulator_graded_rag.letter_page import LetterPage, read_page
 from regulator_graded_rag.letters import SPLIT_FILE, letter_path
 from regulator_graded_rag.manifest import DEFAULT_MANIFEST, load_manifest
 from regulator_graded_rag.passages import DEFAULT_OUT
@@ -65,43 +80,6 @@ _MAX_BODY = 1 << 20
 _CSP = (
     "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; "
     "frame-ancestors 'none'; base-uri 'none'"
-)
-_HINTS = {
-    "picture": (
-        "The letter mentions a picture, sample or attachment: reject the question if"
-        " it needs one."
-    ),
-    "not rewritten": (
-        "No fixed rule rewrote the question: check that it reads as a question on its"
-        " own."
-    ),
-    "known difference": (
-        "eCFR's text differs from the edition's for a cited section: compare the cited"
-        " paragraphs by eye."
-    ),
-    "date from the publish field": (
-        "The letter's first line is not a date, so its publish date is used: confirm"
-        " it."
-    ),
-    "dates differ": (
-        "The letter's own date and its publish date differ: confirm the letter's date."
-    ),
-    "outside the corpus": (
-        "The answer also cites rules outside Parts 171-180. They are not evidence,"
-        " since no run can retrieve them."
-    ),
-    "scrubbed": "Names, emails or phone numbers were removed: check that none is left.",
-    "unnumbered": (
-        "The letter numbers no question: check that the answer is this question's,"
-        " and that the question still names its subject without the letter's opening."
-    ),
-    "answer continues": (
-        "The answer's later paragraphs add citations: keep only the answer's own."
-    ),
-}
-_UNANSWERABLE_HINT = (
-    "Search the corpus first. If nothing in Parts 171-180 answers the question, write"
-    " what you searched under Evidence and save the edit; if something does, reject it."
 )
 _STYLE = """
 body { margin: 0; font: 16px/1.5 system-ui, sans-serif; color: #1d1d1b;
@@ -126,7 +104,19 @@ th, td { padding: 4px 16px 4px 0; text-align: left; vertical-align: top; }
 .letter { background: #fff; padding: 20px 24px; border-radius: 8px;
   border: 1px solid #e4e2da; overflow-wrap: anywhere; }
 .letter p { margin: 0 0 12px; }
+.letter details { margin: 16px 0 0; }
+.ok { color: #1f6b34; }
+.bad { color: #a3261b; font-weight: 600; }
+ul.ticks { margin: 0 0 16px; padding-left: 20px; list-style: none; }
+section > details { margin: 0 0 16px; }
 """
+_BAR = (
+    "Approve unless the verdict needs something nobody can see, the deciding rule is in"
+    " a document outside the corpus, the question is incomplete or points at something"
+    " only the letter shows, personal data is left, or the verdict, evidence or date"
+    " does not match the letter. Wording that is stiff but clear stays. Evidence"
+    " changes only to drop a citation that is not in the answer."
+)
 
 
 @dataclass(frozen=True)
@@ -145,9 +135,10 @@ def digest(draft: Draft) -> str:
 
 
 def item_record(
-    draft: Draft, fields: Mapping[str, object], verified_on: date
+    draft: Draft, fields: Mapping[str, object], verified_on: date, by: str = "owner"
 ) -> dict[str, object]:
-    """The gold item a draft makes, with the fields the owner edited."""
+    """The gold item a draft makes, with the fields the owner edited; by names who
+    verified it, the owner or the checks of code."""
     record: dict[str, object] = {
         "id": draft.id,
         "question": draft.question,
@@ -158,7 +149,7 @@ def item_record(
         "source": draft.source,
         "split": draft.split,
         "written_by": f"PHMSA, extractor {EXTRACTOR}",
-        "verified": f"owner, {verified_on.isoformat()}",
+        "verified": f"{by}, {verified_on.isoformat()}",
         "edition": EDITION,
     }
     return record | dict(fields)
@@ -289,6 +280,43 @@ def pending(drafts: Iterable[Draft], decisions: Path) -> list[Draft]:
     )
 
 
+def current_actions(drafts: Iterable[Draft], decisions: Path) -> dict[str, str]:
+    """Each draft's last decision, which counts only when its digest is the draft's as
+    it now reads."""
+    latest: dict[str, tuple[str, str]] = {}
+    if decisions.is_file():
+        for line in decisions.read_text(encoding="utf-8").splitlines():
+            if line.strip():
+                record = json.loads(line)
+                latest[record["id"]] = (record["action"], record["digest"])
+    found: dict[str, str] = {}
+    for draft in drafts:
+        action, seen = latest.get(draft.id, ("", ""))
+        if seen == digest(draft):
+            found[draft.id] = action
+    return found
+
+
+def to_check(
+    drafts: Iterable[Draft], actions: Mapping[str, str], audit: Audit
+) -> list[Draft]:
+    """The kept drafts with no approval, edit or rejection that the owner still checks,
+    oldest letter first: those outside the audit's pool, which have a reason; those in
+    its sample; and the whole pool once two sampled drafts have changed."""
+    pool, sample = set(audit.pool), set(audit.sample)
+    everything = changed(audit, actions) >= 2
+    return sorted(
+        (
+            draft
+            for draft in drafts
+            if draft.kept
+            and actions.get(draft.id) not in ACTIONS
+            and (everything or draft.id not in pool or draft.id in sample)
+        ),
+        key=lambda draft: (draft.letter_date, draft.id),
+    )
+
+
 def _page(title: str, body: str) -> str:
     return (
         '<!doctype html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n'
@@ -308,17 +336,35 @@ def _message(text: str, token: str = "") -> str:
     )
 
 
+def _focus(draft: Draft, page: LetterPage | None) -> str:
+    """The letter's opening, then the draft's question and its answer's paragraphs."""
+    if page is None:
+        return "<p>The letter's page is missing or unreadable.</p>"
+    e = html.escape
+    shown = [("Opening", opening(page))]
+    if pair := pair_of(draft, page):
+        shown += [("Question", pair.question), ("Answer", pair.answer)]
+    return "\n".join(
+        f"<h3>{label}</h3>\n"
+        + "\n".join(f"<p>{e(line)}</p>" for line in text.splitlines() if line.strip())
+        for label, text in shown
+        if text.strip()
+    )
+
+
 def render(
     draft: Draft,
-    letter_text: str,
+    page: LetterPage | None,
     token: str,
     *,
     error: str = "",
     form: Mapping[str, str] | None = None,
+    units: Sequence[str] = (),
 ) -> str:
-    """One page: the draft's form beside the letter's text, every text escaped, with no
-    script and nothing loaded. After a refused save, error says why and form keeps
-    what the owner typed."""
+    """One page: the draft's form, with its reasons and what code confirmed, beside the
+    letter's question and answer and then the letter folded, every text escaped, with
+    no script and nothing loaded. After a refused save, error says why; form keeps what
+    the owner typed, and units, the corpus's in order, lets the ticks read a range."""
     e = html.escape
     values = {
         "question": draft.question,
@@ -327,9 +373,29 @@ def render(
         "letter_date": draft.letter_date,
     }
     values |= {name: form[name] for name in values if form and name in form}
-    notes = [f"<li><b>{e(f)}</b>: {e(_HINTS.get(f, ''))}</li>" for f in draft.flags]
+    found = reasons(draft, page)
+    notes = [
+        f"<li><b>{e(r.kind)}</b>: {e(r.ask)}"
+        + (f" <i>{e(r.sentence)}</i>" if r.sentence else "")
+        + "</li>"
+        for r in found
+    ]
+    checked = "".join(
+        f'<li class="{"ok" if holds else "bad"}">{"✓" if holds else "✗"} {e(text)}</li>'
+        for holds, text in ticks(draft, page, units)
+    )
+    buttons = ""
+    if page is not None and context_before(draft, page):
+        buttons += (
+            '<button name="action" value="before">'
+            "Add the letter's context before the question</button>\n"
+        )
+    if page is not None and any(r.kind == "colon" for r in found):
+        buttons += (
+            '<button name="action" value="after">'
+            "Add the next paragraph after the question</button>\n"
+        )
     if draft.type == "unanswerable":
-        notes.insert(0, f"<li><b>unanswerable</b>: {e(_UNANSWERABLE_HINT)}</li>")
         answer = (
             '<input type="hidden" name="answer" value="">\n'
             "<p>No answer: the system must decline this question.</p>"
@@ -348,31 +414,36 @@ def render(
         f"<tr><td>{e(label)}</td><td>{e(outcome)}</td></tr>"
         for label, outcome in draft.drift.items()
     )
-    paragraphs = "\n".join(
-        f"<p>{e(line)}</p>" for line in letter_text.splitlines() if line.strip()
+    whole = "\n".join(
+        f"<p>{e(line)}</p>"
+        for line in (page.paragraphs if page is not None else ())
+        if line.strip()
     )
     rows = max(3, len(values["evidence"].splitlines()) + 1)
     body = f"""<section>
 <h1>{e(draft.id)}</h1>
 <p class="meta">Type {e(draft.type)}. Letter dated {e(draft.letter_date)}, from its
 {"own first line" if draft.date_source == "letter" else "publish date"}.</p>
+<details><summary>The bar</summary><p>{e(_BAR)}</p></details>
 {f'<p class="error">{e(error)}</p>' if error else ""}
 {f'<div class="note"><ul>{"".join(notes)}</ul></div>' if notes else ""}
+{f'<ul class="ticks">{checked}</ul>' if checked else ""}
 <form method="post" action="/">
 <button type="submit" disabled hidden aria-hidden="true"></button>
 <input type="hidden" name="token" value="{e(token)}">
 <input type="hidden" name="id" value="{e(draft.id)}">
 <label for="question">Question</label>
 <textarea id="question" name="question" rows="5">{e(values["question"])}</textarea>
+{f'<div class="actions">{buttons}</div>' if buttons else ""}
 {answer}
 <label for="evidence">Evidence, one label per line</label>
 <textarea id="evidence" name="evidence" rows="{rows}">{e(values["evidence"])}</textarea>
 <label for="letter_date">Letter date</label>
 <input id="letter_date" name="letter_date" value="{e(values["letter_date"])}">
 <div class="actions">
-<button name="action" value="approve">Approve as drafted</button>
-<button name="action" value="edit">Save edits</button>
-<button name="action" value="reject">Reject</button>
+<button name="action" value="approve" accesskey="a">Approve as drafted</button>
+<button name="action" value="edit" accesskey="s">Save edits</button>
+<button name="action" value="reject" accesskey="r">Reject</button>
 </div>
 </form>
 {f"<table><tr><th>Label</th><th>Drift check</th></tr>{drift}</table>" if drift else ""}
@@ -380,13 +451,17 @@ def render(
 </section>
 <section class="letter">
 <h2>The letter</h2>
-{paragraphs}
+{_focus(draft, page)}
+<details><summary>The whole letter</summary>
+{whole}
+</details>
 </section>"""
     return _page(f"{draft.id}: the owner's check", body)
 
 
 class _Review(ThreadingHTTPServer):
-    """The page's server, with the drafts still to check and where decisions go."""
+    """The page's server, with the drafts still to check and where decisions go. units
+    are the corpus's, in corpus order."""
 
     daemon_threads = True
 
@@ -394,22 +469,26 @@ class _Review(ThreadingHTTPServer):
         self,
         port: int,
         token: str,
-        queue: Sequence[Draft],
+        all_drafts: Sequence[Draft],
         drafts: Path,
         decisions: Path,
         tables: AbstractSet[str],
-        units: AbstractSet[str],
-        letter: Callable[[Draft], str],
+        units: Iterable[str],
+        letter: Callable[[Draft], LetterPage | None],
+        audit: Audit,
     ) -> None:
         super().__init__(("127.0.0.1", port), _Handler)
         self.port = int(self.server_address[1])  # the bound one, when port is 0
         self.token = token
-        self.drafts = {draft.id: draft for draft in queue}
-        self.queue = list(queue)
+        self.drafts = {draft.id: draft for draft in all_drafts}
+        self.audit = audit
+        self.actions = current_actions(all_drafts, decisions)
+        self.queue = to_check(all_drafts, self.actions, audit)
         self.drafts_file = drafts
         self.decisions = decisions
         self.tables = tables
-        self.units = units
+        self.unit_order = tuple(units)
+        self.units = frozenset(self.unit_order)
         self.letter = letter
         self.lock = threading.Lock()
 
@@ -461,8 +540,32 @@ class _Handler(BaseHTTPRequestHandler):
             text = "Every kept draft has a decision. Stop the command with Ctrl+C."
             self._send(HTTPStatus.OK, _message(text))
             return
-        page = render(draft, self.review.letter(draft), self.review.token)
+        page = render(
+            draft,
+            self.review.letter(draft),
+            self.review.token,
+            units=self.review.unit_order,
+        )
         self._send(HTTPStatus.OK, page)
+
+    def _with_context(
+        self, draft: Draft, letter: LetterPage | None, form: Mapping[str, str]
+    ) -> str:
+        """The form again, its question field with the letter's context added by a fixed
+        rule to what the owner typed; everything else typed stays as typed."""
+        question = form.get("question", draft.question)
+        if letter is not None:
+            if form["action"] == "before":
+                question = f"{context_before(draft, letter)} {question}".strip()
+            else:
+                question = f"{question} {context_after(draft, letter)}".strip()
+        return render(
+            draft,
+            letter,
+            self.review.token,
+            form={**form, "question": question},
+            units=self.review.unit_order,
+        )
 
     def do_POST(self) -> None:
         try:
@@ -477,9 +580,14 @@ class _Handler(BaseHTTPRequestHandler):
         if self._refused(form.get("token", "")):
             return
         token = self.review.token
-        draft = self.review.drafts.get(form.get("id", ""))
+        with self.review.lock:
+            draft = next((d for d in self.review.queue if d.id == form.get("id")), None)
         if draft is None:
             self._send(HTTPStatus.BAD_REQUEST, _message("No draft by that ID.", token))
+            return
+        letter = self.review.letter(draft)
+        if form.get("action") in ("before", "after"):
+            self._send(HTTPStatus.OK, self._with_context(draft, letter, form))
             return
         try:
             decision = decide(
@@ -492,7 +600,12 @@ class _Handler(BaseHTTPRequestHandler):
             )
         except ValueError as err:
             page = render(
-                draft, self.review.letter(draft), token, error=str(err), form=form
+                draft,
+                letter,
+                token,
+                error=str(err),
+                form=form,
+                units=self.review.unit_order,
             )
             self._send(HTTPStatus.BAD_REQUEST, page)
             return
@@ -503,26 +616,27 @@ class _Handler(BaseHTTPRequestHandler):
             kept = kept_as(draft, decision.action, decision.fields)
             if kept != draft:
                 rewrite_draft(self.review.drafts_file, kept)
-                self.review.drafts[draft.id] = kept
-            self.review.queue = [d for d in self.review.queue if d.id != draft.id]
+            self.review.drafts[draft.id] = kept
+            self.review.actions[draft.id] = decision.action
+            self.review.queue = to_check(
+                self.review.drafts.values(), self.review.actions, self.review.audit
+            )
             left = len(self.review.queue)
         print(f"{decision.id}: {decision.action}; {left} left to check", flush=True)
         self._send(HTTPStatus.SEE_OTHER, _message("Saved.", token), f"/?token={token}")
 
 
-def _letters(splits: Mapping[str, str]) -> Callable[[Draft], str]:
-    """The letter's response text for a draft, read from its split's folder."""
+def _letters(splits: Mapping[str, str]) -> Callable[[Draft], LetterPage | None]:
+    """The letter's page for a draft, read from its split's folder; None when it is
+    missing or unreadable."""
 
-    def text(draft: Draft) -> str:
+    def page(draft: Draft) -> LetterPage | None:
         path = letter_path(draft.letter, splits) if draft.letter in splits else None
-        page = None
-        if path is not None and path.is_file():
-            page = read_page(path.read_text(encoding="utf-8"))
-        if page is None:
-            return "The letter's page is missing or unreadable."
-        return "\n".join(page.paragraphs)
+        if path is None or not path.is_file():
+            return None
+        return read_page(path.read_text(encoding="utf-8"))
 
-    return text
+    return page
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -553,11 +667,18 @@ def main(argv: Sequence[str] | None = None) -> int:
             " questions before seeing any draft"
         )
         return 1
+    audit_file = AUDIT[args.split]
+    if not audit_file.is_file():
+        print(
+            "the audit is not drawn: run python -m regulator_graded_rag.audit"
+            f" --split {args.split} --draw"
+        )
+        return 1
     decisions = args.decisions or DECISIONS[args.split]
     drafts_file = args.drafts or DRAFTS[args.split]
     try:
         drafts = load_drafts(drafts_file)
-        queue = pending(drafts, decisions)
+        audit = load_audit(audit_file)
         splits = load_split(SPLIT_FILE)
         records = read_passages(DEFAULT_OUT, load_manifest(DEFAULT_MANIFEST))
     except FileNotFoundError as err:
@@ -566,23 +687,29 @@ def main(argv: Sequence[str] | None = None) -> int:
     except (KeyError, TypeError, ValueError) as err:
         print(f"an input is wrong: {err!r}")
         return 1
-    units = frozenset(record["id"].rsplit(":", 1)[0] for record in records)
+    units = tuple(dict.fromkeys(record["id"].rsplit(":", 1)[0] for record in records))
     token = secrets.token_urlsafe(32)
     try:
         server = _Review(
             args.port,
             token,
-            queue,
+            drafts,
             drafts_file,
             decisions,
             table_units(records),
             units,
             _letters(splits),
+            audit,
         )
     except OSError as err:
         print(f"port {args.port}: {err.strerror}")
         return 1
-    print(f"{len(queue)} of {sum(d.kept for d in drafts)} kept drafts to check.")
+    queue = server.queue
+    sampled = sum(d.id in audit.sample for d in queue)
+    print(
+        f"{len(queue)} to check: {len(queue) - sampled} with a reason,"
+        f" {sampled} in the audit sample"
+    )
     print(f"Open http://127.0.0.1:{args.port}/?token={token}", flush=True)
     print("Stop with Ctrl+C; every decision is saved as it is made.", flush=True)
     with server:

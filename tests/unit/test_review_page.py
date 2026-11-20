@@ -2,27 +2,33 @@
 import http.client
 import json
 import threading
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from dataclasses import replace
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
 from urllib.parse import urlencode
 
 import pytest
 
+from regulator_graded_rag.audit import Audit
 from regulator_graded_rag.drafts import Draft, load_drafts, write_drafts
+from regulator_graded_rag.letter_page import LetterPage
 from regulator_graded_rag.review_page import (
     Decision,
     _Review,
     allowed_host,
     append_decision,
+    current_actions,
     decide,
     digest,
+    item_record,
     main,
     pending,
     render,
     rewrite_draft,
+    to_check,
 )
+from tests.unit.test_checks import letter
 
 DRAFT = Draft(
     id="99-0001-Q1",
@@ -56,6 +62,16 @@ NOW = datetime(2026, 11, 20, 10, tzinfo=UTC)
 NO_TABLES: frozenset[str] = frozenset()
 UNITS = frozenset({"171.1", "172.101"})
 BLANK = replace(DRAFT, question="")
+THIRD = replace(
+    DRAFT,
+    id="99-0003-Q1",
+    letter="99-0003",
+    letter_date="2022-01-01",
+    question="Is it the case that § 171.1 covers a packaging's marking?",
+)
+NO_AUDIT = Audit("dev", "1", "2026-11-21", (), ())
+ANSWER = "The answer is yes. A person who marks a packaging is subject to § 171.1(a)."
+FACTS = "You state that Jane Doe ships widgets by road."
 
 
 @pytest.mark.parametrize(
@@ -186,13 +202,13 @@ def test_rewriting_a_draft_changes_its_line_alone(tmp_path: Path) -> None:
 
 def test_the_page_escapes_letter_and_draft_text() -> None:
     draft = replace(DRAFT, question="Is it <script>alert(1)</script>?")
-    page = render(draft, "Dear <script>x</script>,\nThe answer is yes.", "t")
+    page = render(draft, letter("Dear <script>x</script>,"), "t")
     assert "&lt;script&gt;" in page
     assert "<script" not in page
 
 
 def test_the_page_loads_nothing_from_elsewhere() -> None:
-    page = render(DRAFT, "The answer is yes.", "t")
+    page = render(DRAFT, letter(f"Q1. {DRAFT.question}", f"A1. {ANSWER}"), "t")
     for tag in ("<link", "<img", "<iframe", "src="):
         assert tag not in page
     assert 'name="token" value="t"' in page
@@ -201,7 +217,7 @@ def test_the_page_loads_nothing_from_elsewhere() -> None:
 def test_enter_in_a_field_submits_nothing() -> None:
     # A browser submits a form on Enter through its first submit button; a disabled
     # one submits nothing, so Enter in the date field approves no draft.
-    page = render(DRAFT, "The answer is yes.", "t")
+    page = render(DRAFT, None, "t")
     first = page[page.index("<button") :].split(">", 1)[0]
     assert "disabled" in first
     assert page.index("<button") < page.index('value="approve"')
@@ -253,27 +269,46 @@ def test_a_draft_changed_since_its_decision_is_checked_again(tmp_path: Path) -> 
     assert pending([DRAFT], tmp_path / "none.jsonl") == [DRAFT]
 
 
+Serve = Callable[..., tuple[_Review, Path, Path]]
+
+
 @pytest.fixture
-def page(tmp_path: Path) -> Iterator[tuple[_Review, Path, Path]]:
-    """The page's real server on 127.0.0.1, on a port the system picks."""
-    drafts = tmp_path / "drafts.jsonl"
-    write_drafts(drafts, [DRAFT, LATER])
-    decisions = tmp_path / "decisions.jsonl"
-    server = _Review(
-        0,
-        "t",
-        [DRAFT, LATER],
-        drafts,
-        decisions,
-        NO_TABLES,
-        UNITS,
-        lambda draft: "The answer is yes.",
-    )
-    thread = threading.Thread(target=server.serve_forever, daemon=True)
-    thread.start()
-    yield server, drafts, decisions
-    server.shutdown()
-    server.server_close()
+def serve(tmp_path: Path) -> Iterator[Serve]:
+    """A factory for the page's real server on 127.0.0.1, on a port the system picks."""
+    started: list[_Review] = []
+
+    def start(
+        drafts: list[Draft],
+        audit: Audit = NO_AUDIT,
+        letter_of: Callable[[Draft], LetterPage | None] = lambda draft: None,
+    ) -> tuple[_Review, Path, Path]:
+        path = tmp_path / "drafts.jsonl"
+        write_drafts(path, drafts)
+        decisions = tmp_path / "decisions.jsonl"
+        server = _Review(
+            0,
+            "t",
+            drafts,
+            path,
+            decisions,
+            NO_TABLES,
+            sorted(UNITS),
+            letter_of,
+            audit,
+        )
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        started.append(server)
+        return server, path, decisions
+
+    yield start
+    for server in started:
+        server.shutdown()
+        server.server_close()
+
+
+@pytest.fixture
+def page(serve: Serve) -> tuple[_Review, Path, Path]:
+    return serve([DRAFT, LATER])
 
 
 def ask(
@@ -375,3 +410,200 @@ def test_held_out_review_needs_the_owners_flag(
     # From an empty folder, so the refusal comes before any file is read.
     monkeypatch.chdir(tmp_path)
     assert main(["--split", "heldout"]) == 2
+
+
+def contextual() -> LetterPage:
+    return LetterPage(
+        "article",
+        None,
+        "",
+        "Jane Doe",
+        (
+            "June 1, 2020",
+            "Dear Ms. Doe:",
+            f"This letter is in response to your email. {FACTS}",
+            f"Q1. {DRAFT.question}",
+            f"A1. {ANSWER}",
+        ),
+    )
+
+
+COLON = replace(DRAFT, question="Is it the case that the following apply:")
+
+
+def test_the_page_asks_each_reason_beside_its_sentence() -> None:
+    draft = replace(DRAFT, question="Is it the case that this applies?")
+    text = render(draft, letter(f"Q1. {draft.question}", f"A1. {ANSWER}"), "t")
+    assert "points at something it does not say" in text
+    assert "<i>this</i>" in text
+    assert "Add the next paragraph after the question" not in text
+    colon = render(COLON, letter(f"Q1. {COLON.question}", f"A1. {ANSWER}"), "t")
+    assert 'value="after"' in colon
+    assert "Add the next paragraph after the question" in colon
+
+
+def test_the_page_ticks_what_code_confirmed() -> None:
+    wrong = replace(DRAFT, evidence=("172.101",))
+    units = sorted(UNITS)
+    page_text = letter(f"Q1. {DRAFT.question}", f"A1. {ANSWER}")
+    text = render(wrong, page_text, "t", units=units)
+    assert '<li class="ok">✓ The question holds no name</li>' in text
+    assert '<li class="bad">✗ The answer cites 172.101</li>' in text
+
+
+def test_the_page_puts_the_question_and_its_answer_first_and_folds_the_letter() -> None:
+    other = "A paragraph that belongs to neither the question nor the answer."
+    page_text = letter(other, f"Q1. {DRAFT.question}", f"A1. {ANSWER}")
+    text = render(DRAFT, page_text, "t")
+    fold = text.index("<details><summary>The whole letter</summary>")
+    start = text.index('class="letter"')
+    assert start < text.index(DRAFT.question, start) < fold
+    assert text.index(ANSWER, start) < fold
+    assert text.index("This letter is in response", start) < fold
+    assert other not in text[:fold]
+    assert other in text[fold:]
+
+
+def test_decisions_have_access_keys() -> None:
+    text = render(DRAFT, None, "t")
+    for value, key in (("approve", "a"), ("edit", "s"), ("reject", "r")):
+        assert f'<button name="action" value="{value}" accesskey="{key}">' in text
+
+
+def test_the_page_states_the_bar() -> None:
+    text = render(DRAFT, None, "t")
+    assert "<details><summary>The bar</summary>" in text
+    assert "Approve unless the verdict needs something nobody can see" in text
+    assert "only to drop a citation that is not in the answer." in text
+
+
+def test_a_context_button_fills_the_question_and_saves_nothing(serve: Serve) -> None:
+    server, drafts, decisions = serve([DRAFT], letter_of=lambda draft: contextual())
+    before = drafts.read_bytes()
+    form = {"token": "t", "id": DRAFT.id, "action": "before", "question": "Typed?"}
+    status, text = ask(server, "POST", form=form)
+    assert status == 200
+    assert "ships widgets by road. Typed?</textarea>" in text
+    assert not decisions.exists() and drafts.read_bytes() == before
+
+
+def test_a_context_button_adds_the_next_paragraph_after_the_question(
+    serve: Serve,
+) -> None:
+    page_text = letter(
+        f"Q1. {COLON.question}", "Both of them, in a drum.", f"A1. {ANSWER}"
+    )
+    server, _, _ = serve([COLON], letter_of=lambda draft: page_text)
+    form = {"token": "t", "id": COLON.id, "action": "after", "question": "Typed:"}
+    status, text = ask(server, "POST", form=form)
+    assert status == 200
+    assert "Typed: Both of them, in a drum.</textarea>" in text
+
+
+def test_context_through_a_button_is_scrubbed(serve: Serve) -> None:
+    server, _, _ = serve([DRAFT], letter_of=lambda draft: contextual())
+    form = {"token": "t", "id": DRAFT.id, "action": "before", "question": "Q?"}
+    status, text = ask(server, "POST", form=form)
+    field = text.split('name="question" rows="5">')[1].split("</textarea>")[0]
+    assert status == 200 and "ships widgets" in field and "Jane Doe" not in field
+
+
+def test_a_context_button_needs_the_token_and_the_host(serve: Serve) -> None:
+    server, _, _ = serve([DRAFT], letter_of=lambda draft: contextual())
+    form = {"id": DRAFT.id, "action": "before", "question": "Q?"}
+    assert ask(server, "POST", form=form | {"token": "u"})[0] == 404
+    bad = ask(server, "POST", form=form | {"token": "t"}, host="evil.example:1")
+    assert bad[0] == 403
+
+
+def test_to_check_holds_the_drafts_with_a_reason_and_the_sample() -> None:
+    pool = (DRAFT.id, LATER.id, THIRD.id)
+    audit = Audit("dev", "1", "2026-11-21", pool, (DRAFT.id, THIRD.id))
+    reasoned = replace(
+        DRAFT, id="99-0004-Q1", letter="99-0004", letter_date="2023-01-01"
+    )
+    unkept = replace(reasoned, id="99-0005-Q1", kept=False)
+    drafts = [reasoned, THIRD, unkept, LATER, DRAFT]
+    assert to_check(drafts, {}, audit) == [DRAFT, THIRD, reasoned]
+    assert to_check(drafts, {DRAFT.id: "approve"}, audit) == [THIRD, reasoned]
+    assert to_check(drafts, {THIRD.id: "reject"}, audit) == [DRAFT, reasoned]
+
+
+def test_two_changes_send_the_whole_pool_to_the_owner() -> None:
+    pool = (DRAFT.id, LATER.id, THIRD.id)
+    audit = Audit("dev", "1", "2026-11-21", pool, (DRAFT.id, LATER.id))
+    drafts = [DRAFT, LATER, THIRD]
+    one = {DRAFT.id: "edit"}
+    assert to_check(drafts, one, audit) == [LATER]
+    two = one | {LATER.id: "reject"}
+    assert to_check(drafts, two, audit) == [THIRD]
+
+
+def test_the_page_serves_the_pool_after_two_changes(serve: Serve) -> None:
+    pool = (DRAFT.id, LATER.id, THIRD.id)
+    audit = Audit("dev", "1", "2026-11-21", pool, (DRAFT.id, LATER.id))
+    server, _, _ = serve([DRAFT, LATER, THIRD], audit)
+    edit = {"token": "t", "action": "edit"}
+    assert THIRD.id not in ask(server, "GET", "/?token=t")[1]
+    first = edit | {"id": DRAFT.id, "letter_date": "2020-03-03"}
+    assert ask(server, "POST", form=first)[0] == 303
+    text = ask(server, "GET", "/?token=t")[1]
+    assert LATER.id in text and THIRD.id not in text
+    second = edit | {"id": LATER.id, "letter_date": "2021-04-02"}
+    assert ask(server, "POST", form=second)[0] == 303
+    assert THIRD.id in ask(server, "GET", "/?token=t")[1]
+
+
+def test_a_read_is_not_an_owner_decision(tmp_path: Path) -> None:
+    audit = Audit("dev", "1", "2026-11-21", (DRAFT.id, LATER.id), (DRAFT.id,))
+    path = tmp_path / "decisions.jsonl"
+    line = {"id": DRAFT.id, "action": "read", "fields": {}, "at": "x"}
+    path.write_text(
+        json.dumps(line | {"digest": digest(DRAFT)}) + "\n", encoding="utf-8"
+    )
+    actions = current_actions([DRAFT, LATER], path)
+    assert actions == {DRAFT.id: "read"}
+    assert to_check([DRAFT, LATER], actions, audit) == [DRAFT]
+
+
+def test_current_actions_counts_only_the_draft_as_it_now_reads(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "decisions.jsonl"
+    append_decision(path, Decision(DRAFT.id, "approve", {}, "x", digest(DRAFT)))
+    append_decision(path, Decision(DRAFT.id, "reject", {}, "x", digest(BLANK)))
+    append_decision(path, Decision(LATER.id, "edit", {}, "x", "an older draft's"))
+    assert current_actions([DRAFT, LATER], path) == {}
+    assert current_actions([BLANK, LATER], path) == {DRAFT.id: "reject"}
+    assert current_actions([DRAFT], tmp_path / "none.jsonl") == {}
+
+
+def test_the_page_needs_the_audit(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "unanswerable.jsonl").write_text("", encoding="utf-8")
+    drafts = tmp_path / "drafts.jsonl"
+    write_drafts(drafts, [DRAFT])
+    code = main(
+        [
+            "--split",
+            "dev",
+            "--drafts",
+            str(drafts),
+            "--decisions",
+            str(tmp_path / "decisions.jsonl"),
+            "--unanswerable",
+            str(tmp_path / "unanswerable.jsonl"),
+        ]
+    )
+    assert code == 1
+    out = capsys.readouterr().out
+    assert "the audit is not drawn" in out
+    assert "regulator_graded_rag.audit --split dev --draw" in out
+
+
+def test_code_verified_items_name_their_verifier() -> None:
+    record = item_record(DRAFT, {}, date(2026, 11, 21), by="code checks 1")
+    assert record["verified"] == "code checks 1, 2026-11-21"
+    assert item_record(DRAFT, {}, date(2026, 11, 21))["verified"] == "owner, 2026-11-21"
