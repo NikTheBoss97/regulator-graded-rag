@@ -1,4 +1,5 @@
 # Author: Nicola Antonello
+import html
 import http.client
 import json
 import threading
@@ -458,6 +459,7 @@ def contextual() -> LetterPage:
 
 
 COLON = replace(DRAFT, question="Is it the case that the following apply:")
+NEXT_PARAGRAPH = (f"Q1. {COLON.question}", "Both of them, in a drum.", f"A1. {ANSWER}")
 
 
 def test_the_page_asks_each_reason_beside_its_sentence() -> None:
@@ -466,9 +468,15 @@ def test_the_page_asks_each_reason_beside_its_sentence() -> None:
     assert "points at something it does not say" in text
     assert "<i>this</i>" in text
     assert "Add the next paragraph after the question" not in text
-    colon = render(COLON, letter(f"Q1. {COLON.question}", f"A1. {ANSWER}"), "t")
+    colon = render(COLON, letter(*NEXT_PARAGRAPH), "t")
     assert 'value="after"' in colon
     assert "Add the next paragraph after the question" in colon
+
+
+# As the page writes it: every text is escaped, the apostrophe too.
+NO_NAME = html.escape(
+    "No name from the letter's salutation or name fields in the question"
+)
 
 
 def test_the_page_ticks_what_code_confirmed() -> None:
@@ -476,8 +484,53 @@ def test_the_page_ticks_what_code_confirmed() -> None:
     units = sorted(UNITS)
     page_text = letter(f"Q1. {DRAFT.question}", f"A1. {ANSWER}")
     text = render(wrong, page_text, "t", units=units)
-    assert '<li class="ok">✓ The question holds no name</li>' in text
+    assert f'<li class="ok">✓ {NO_NAME}</li>' in text
     assert '<li class="bad">✗ The answer cites 172.101</li>' in text
+
+
+def test_the_after_button_shows_only_when_it_adds_something() -> None:
+    assert 'value="after"' in render(COLON, letter(*NEXT_PARAGRAPH), "t")
+    # Q1 and Q2 before A1 and A2: nothing between Q1 and the next question.
+    listed = letter(
+        f"Q1. {COLON.question}",
+        "Q2. Is it the case that a drum needs a label?",
+        f"A1. {ANSWER}",
+        f"A2. {ANSWER}",
+    )
+    assert 'value="after"' not in render(COLON, listed, "t")
+    # Once the colon is gone from the field, the button goes too.
+    typed = {"question": "Is it the case that both apply?"}
+    assert 'value="after"' not in render(
+        COLON, letter(*NEXT_PARAGRAPH), "t", form=typed
+    )
+
+
+def roe() -> LetterPage:
+    """A letter whose salutation names Ms. Roe, whom the page's name fields do not."""
+    return LetterPage(
+        "article",
+        None,
+        "",
+        "",
+        (
+            "June 1, 2020",
+            "Dear Ms. Roe:",
+            (
+                "This letter is in response to your email. You state that Ms. Roe"
+                " ships drums by road."
+            ),
+            f"Q1. {DRAFT.question}",
+            f"A1. {ANSWER}",
+        ),
+    )
+
+
+def test_the_page_checks_the_question_the_field_shows() -> None:
+    form = {"question": "Is it the case that Ms. Roe must mark the drums?"}
+    text = render(DRAFT, roe(), "t", form=form)
+    assert "<b>name</b>" in text
+    assert f'<li class="bad">✗ {NO_NAME}</li>' in text
+    assert f"✓ {NO_NAME}" not in text
 
 
 def test_the_page_puts_the_question_and_its_answer_first_and_folds_the_letter() -> None:
@@ -535,6 +588,23 @@ def test_context_through_a_button_is_scrubbed(serve: Serve) -> None:
     status, text = ask(server, "POST", form=form)
     field = text.split('name="question" rows="5">')[1].split("</textarea>")[0]
     assert status == 200 and "ships widgets" in field and "Jane Doe" not in field
+
+
+def test_after_a_context_button_the_page_vouches_for_no_name_it_shows(
+    serve: Serve,
+) -> None:
+    server, _, _ = serve([DRAFT], letter_of=lambda draft: roe())
+    form = {"token": "t", "id": DRAFT.id, "action": "before"}
+    # The context's salutation surname becomes the placeholder, so the tick holds.
+    status, text = ask(server, "POST", form=form | {"question": DRAFT.question})
+    field = text.split('name="question" rows="5">')[1].split("</textarea>")[0]
+    assert status == 200 and "Ms. [name] ships drums by road." in field
+    assert "Roe" not in field and f'<li class="ok">✓ {NO_NAME}</li>' in text
+    # A name typed in the field is flagged, never ticked as absent.
+    typed = "Is it the case that Ms. Roe must mark the drums?"
+    status, text = ask(server, "POST", form=form | {"question": typed})
+    assert status == 200 and "<b>name</b>" in text
+    assert f'<li class="bad">✗ {NO_NAME}</li>' in text and f"✓ {NO_NAME}" not in text
 
 
 def test_a_context_button_needs_the_token_and_the_host(serve: Serve) -> None:

@@ -256,11 +256,42 @@ def test_a_missing_letter_is_a_reason() -> None:
     assert reason.ask.startswith("The letter's page is missing")
 
 
+def test_a_question_the_letter_does_not_hold_is_a_reason() -> None:
+    draft = replace(DRAFT, id="99-0001-Q5", number=5)
+    assert reasons(draft, PAGE) == [
+        Reason(
+            "no question",
+            "The letter holds no question 5 for this draft: check it against the letter"
+            " in the archive.",
+        )
+    ]
+
+
+def test_a_verdict_the_answer_does_not_give_is_a_reason() -> None:
+    answer = "The answer is no. A drum need not be marked under § 172.401(a)(2)."
+    page = letter(f"Q1. {QUESTION}", f"A1. {answer}")
+    assert reasons(DRAFT, page) == [
+        Reason(
+            "verdict",
+            "The answer's first words do not give the draft's verdict: check the yes or"
+            " no against the letter.",
+        )
+    ]
+    # An unanswerable draft has no verdict to compare.
+    assert kinds(replace(DRAFT, type="unanswerable", answer=""), page) == [
+        "unanswerable"
+    ]
+
+
 def test_ticks_confirm_the_verdict_each_label_and_no_name() -> None:
     got = ticks(DRAFT, PAGE)
     assert all(ok for ok, _ in got)
     assert len(got) == 1 + len(DRAFT.evidence) + 1
     assert any("The answer is yes." in text for _, text in got)
+    assert got[-1] == (
+        True,
+        "No name from the letter's salutation or name fields in the question",
+    )
 
 
 def test_a_label_not_in_the_answer_gets_no_tick() -> None:
@@ -324,6 +355,67 @@ def test_context_before_takes_the_scenario_after_a_colon() -> None:
     assert context_before(DRAFT, page) == "A truck carries 3 drums of paint."
 
 
+SCENARIO = "A truck carries 3 drums of paint by highway."
+CLOSING = "If you have further questions, please contact this office."
+
+
+@pytest.mark.parametrize(
+    "rest",
+    [
+        # The reviewer's letter: its answer follows the scenario.
+        (
+            "The answer is yes. The drums must be marked under § 172.401(a)(2).",
+            CLOSING,
+            "Sincerely,",
+            "Standards and Rulemaking Division",
+        ),
+        # The asking paragraph is the question, its other sentences included.
+        (
+            "You ask whether the drums must be marked. The drums hold paint.",
+            "The answer is yes.",
+            CLOSING,
+        ),
+        (CLOSING, "Sincerely,", "Standards and Rulemaking Division"),
+        ("A1. Yes, under § 172.401(a)(2).", CLOSING),
+    ],
+)
+def test_context_before_ends_where_the_letter_asks_answers_or_closes(
+    rest: tuple[str, ...],
+) -> None:
+    opening = (
+        "This letter is in response to your email. You describe the following scenario:"
+    )
+    page = LetterPage(
+        "article",
+        None,
+        "",
+        "",
+        ("June 1, 2020", "Dear Ms. Doe:", opening, SCENARIO, *rest),
+    )
+    assert context_before(replace(DRAFT, numbered=False), page) == SCENARIO
+
+
+def test_an_unnumbered_question_asked_in_the_opening_has_no_context_before() -> None:
+    # An unnumbered question is the opening's sentences, so their facts are in it
+    # already; a numbered question is not, so on the same page its draft keeps them.
+    opening = (
+        "This letter is in response to your email. You state that you ship drums of"
+        " paint by highway. You ask whether the drums must be marked."
+    )
+    answer = "The answer is yes. The drums must be marked under § 172.401(a)(2)."
+    page = LetterPage(
+        "article",
+        None,
+        "",
+        "",
+        ("June 1, 2020", "Dear Ms. Doe:", opening, answer, CLOSING),
+    )
+    assert context_before(replace(DRAFT, numbered=False), page) == ""
+    assert context_before(DRAFT, page) == (
+        "You state that you ship drums of paint by highway."
+    )
+
+
 def test_context_after_completes_a_question_ending_with_a_colon() -> None:
     page = letter(
         "Q1. Is it the case that there are criteria? You state the criteria are:",
@@ -331,6 +423,37 @@ def test_context_after_completes_a_question_ending_with_a_colon() -> None:
         "A1. The answer is no, under § 172.401(a)(2).",
     )
     assert context_after(DRAFT, page) == "(1) one; (2) two; (3) three."
+
+
+def test_context_after_ends_at_the_next_question() -> None:
+    # The reviewer's letter lists Q1 and Q2 before A1 and A2.
+    first = "Q1. Is it the case that there are criteria? You state the criteria are:"
+    second = "Q2. Is it the case that a drum needs a label?"
+    answers = (
+        "A1. The answer is no, under § 172.401(a)(2).",
+        "A2. The answer is yes, under § 172.400.",
+    )
+    assert context_after(DRAFT, letter(first, second, *answers)) == ""
+    listed = letter(first, "(1) one; (2) two.", second, *answers)
+    assert context_after(DRAFT, listed) == "(1) one; (2) two."
+
+
+def test_context_replaces_a_surname_from_the_salutation() -> None:
+    # The page's name fields are empty, so only the salutation names Ms. Roe.
+    opening = (
+        "This letter is in response to your email. You state that Ms. Roe ships drums"
+        " by road."
+    )
+    page = LetterPage(
+        "article",
+        None,
+        "",
+        "",
+        ("June 1, 2020", "Dear Ms. Roe:", opening, f"Q1. {QUESTION}", f"A1. {ANSWER}"),
+    )
+    assert (
+        context_before(DRAFT, page) == "You state that Ms. [name] ships drums by road."
+    )
 
 
 def test_context_is_scrubbed() -> None:
