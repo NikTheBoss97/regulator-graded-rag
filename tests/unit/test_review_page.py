@@ -166,6 +166,22 @@ def test_approving_an_edited_form_is_refused() -> None:
         decide(DRAFT, form, "t", NOW, tables=NO_TABLES, units=UNITS)
 
 
+AS_DRAFTED = {
+    "question": DRAFT.question,
+    "answer": DRAFT.answer,
+    "evidence": "\n".join(DRAFT.evidence),
+    "letter_date": DRAFT.letter_date,
+}
+
+
+@pytest.mark.parametrize("form", [{}, AS_DRAFTED])
+def test_saving_edits_that_change_nothing_is_refused(form: dict[str, str]) -> None:
+    # An edit counts as an audit change (ADR-0022), so an empty one is no decision.
+    form = form | {"token": "t", "action": "edit"}
+    with pytest.raises(ValueError, match="nothing changed"):
+        decide(DRAFT, form, "t", NOW, tables=NO_TABLES, units=UNITS)
+
+
 def test_a_rejection_needs_no_valid_item() -> None:
     form = {"token": "t", "action": "reject", "answer": "maybe"}
     decision = decide(DRAFT, form, "t", NOW, tables=NO_TABLES, units=UNITS)
@@ -382,6 +398,16 @@ def test_a_rejection_takes_the_question_out_of_the_drafts_file(
     assert load_drafts(drafts) == [BLANK, LATER]
     assert DRAFT.question.encode() not in drafts.read_bytes()
     assert pending(load_drafts(drafts), decisions) == [LATER]
+
+
+def test_an_empty_save_records_nothing(page: tuple[_Review, Path, Path]) -> None:
+    server, drafts, decisions = page
+    before = drafts.read_bytes()
+    form = AS_DRAFTED | {"token": "t", "id": DRAFT.id, "action": "edit"}
+    status, text = ask(server, "POST", form=form)
+    assert status == 400 and "nothing changed" in text
+    assert not decisions.exists() and drafts.read_bytes() == before
+    assert server.queue == [DRAFT, LATER]
 
 
 def test_the_page_waits_for_the_unanswerable_split(
@@ -883,3 +909,14 @@ def test_a_forged_check_records_nothing(serve: Serve) -> None:
         "/read?token=t"
     )
     assert not decisions.exists()
+
+
+@pytest.mark.parametrize("action", [{"action": "approve"}, {"action": ""}, {}])
+def test_a_read_needs_the_read_action(serve: Serve, action: dict[str, str]) -> None:
+    server, _, decisions = serve([DRAFT, LATER, THIRD], reading_audit())
+    ask(server, "POST", form={"token": "t", "id": DRAFT.id, "action": "approve"})
+    lines = decisions.read_bytes()
+    form = {"token": "t", "ids": f"{LATER.id} {THIRD.id}"} | action
+    assert location(server, "/read", form) == "/read?token=t"
+    assert decisions.read_bytes() == lines
+    assert server.reading == [LATER, THIRD]
