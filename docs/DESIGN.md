@@ -71,8 +71,10 @@ These hold everywhere, and tests check them:
   outputs and cost.
 - Results are compared only on the same corpus and gold-set versions.
 - Retrieval and generation are measured separately.
-- Every gold label is checked by the owner. Code or a model may draft one, but only the
-  owner approves it, and each record says who wrote it.
+- Every gold label is either checked by the owner, or accepted by code's checks and
+  covered by the owner's random audit ([ADR-0022](adr/0022-code-checks-and-an-audit-for-gold-items.md)).
+  Every question in git has been read by the owner. Each record says who wrote and who
+  verified it, and the audit's result is published.
 - Retrieved text is data, never instructions: a passage cannot change the system prompt
   or trigger an action, and a test with planted passages proves it.
 
@@ -295,10 +297,12 @@ Internet Archive's copies because PHMSA's site refuses scripts
   international air and sea rules. Letter questions whose answers cite only rules
   outside Parts 171–180 count too, if the full run finds any; the sample found none.
 - **Personal data.** Items keep only the question and the answer. A script removes the
-  names, emails and phone numbers it recognises, and the owner confirms each item is
-  clean.
-- **The owner's check.** For each item: the verdict, the cited sections, the date, that
-  the question stands on its own, and that no personal data is left.
+  names, emails and phone numbers it recognises, and the owner reads every question
+  before it reaches git.
+- **The checks.** Code checks every draft ([ADR-0022](adr/0022-code-checks-and-an-audit-for-gold-items.md)).
+  The owner judges the drafts it cannot clear, and audits 40 of the rest per split. For
+  each draft: the verdict, the cited sections, the date, that the question stands on its
+  own, and that no personal data is left.
 
 ### Dev and held-out
 
@@ -462,7 +466,7 @@ The repository, CI and security rules are in
   that need code from their own repository.
 - Local model servers listen only on localhost.
 - The corpus is pinned by checksums, so a changed file fails the fetch.
-- Raw letters are never committed. Items are cleaned, and the owner checks each one.
+- Raw letters are never committed. Items are cleaned, and the owner reads every question that reaches git.
 - uv's lock file pins every dependency by hash.
 - Only public corpus text and the project's own questions go to a model provider.
 
@@ -474,7 +478,7 @@ full-time estimates, none of them measured.
 | Phase | What gets built | Exit check | Rough time |
 |---|---|---|---|
 | 1. Foundations | The repository, CI, Postgres in Docker, the corpus fetch, the passage builder, the trailer check | Word conservation, one passage per table row and stable IDs pass; the hardest sections pass their checks and the owner's comparison with the PDF pages; CI is green on `main` | 1 week |
-| 2. Evaluation first | The letters fetched, grouped and split; questions extracted and drift-checked; the owner's check and unanswerable questions; the harness; BM25 in SQL | The owner has approved the dev questions; the held-out file is frozen with its checksum committed; BM25's results row comes from a committed run record | 1.5 weeks |
+| 2. Evaluation first | The letters fetched, grouped and split; questions extracted and drift-checked; the owner's check and unanswerable questions; the harness; BM25 in SQL | The dev gold set is built from the owner's decisions and the audit, with its result published; the held-out file is frozen with its checksum committed; BM25's results row comes from a committed run record | 1.5 weeks |
 | 3. Retrieval | Dense retrieval, hybrid retrieval and reranking | Each has an experiment record with a verdict, losses included | 1 week |
 | 4. Generation | The local generator with the JSON format, quote check, declines and refusals; closed-book, oracle and end-to-end runs; the injection test; the Claude comparison | The generation table shows the supported verdict, verdict accuracy and the false-answer rate; the owner decides when the held-out split runs | 1–1.5 weeks |
 | 5. Improvements | Chunking by regulation paragraph, contextual enrichment, query rewriting and table handling, each with cost and latency | Each has an experiment record against the current best, losses included | 1 week |
@@ -507,7 +511,7 @@ Each is made when its phase starts, with options and an ADR:
 | Too few questions to tell setups apart: the sample predicts about 200, with about 120 answerable in dev | Phase 2, right after the split | Every comparison shows its interval, and "no difference" reads as "too small to see". A large shortfall brings the 2017 cut-off back to the owner |
 | The local model cannot copy quotes word for word, or is too slow. A schema fixes the JSON's shape, not the wording of a quote | Phase 4, by the oracle run | An unverified quote is already a decline, so the cost shows as a measured decline rate, never as a false citation. Next comes a larger model through Colibri, whose README gives about 11 tokens a second on 8 GB cards, roughly 4 hours per dev run; or Haiku as the default, about $0.07 per dev run, which reopens ADR-0011 with the owner |
 | Sources refuse scripts: PHMSA returns 403, the Internet Archive returned 503 during design, and eCFR needed a specific request header | Phases 1 and 2 | Each file is fetched once, with retries and backoff, and kept with its checksum. All work runs from the saved copies. The archive is read one request every 3 seconds, waiting 10, 60 and then 300 seconds after a refusal |
-| The owner's checking time is on the critical path: the held-out file must be frozen before phase 3, and only the owner checks it | Phase 2 | The harness and BM25 are built meanwhile. At one to two minutes per question, checking takes roughly 4–8 hours, plus 1–2 hours to write the unanswerable questions; up to two working days if the letters take longer |
+| The owner's checking time is on the critical path: the held-out file must be frozen before phase 3, and only the owner checks it | Phase 2 | The harness and BM25 are built meanwhile. At one to two minutes per question, checking takes roughly 4–8 hours, plus 1–2 hours to write the unanswerable questions; up to two working days if the letters take longer. Code's checks and an audit ([ADR-0022](adr/0022-code-checks-and-an-audit-for-gold-items.md)) cut the owner's share to the drafts code cannot clear plus 40 per split |
 | eCFR's text for 1 October 2025 differs from the GovInfo edition | Checked on 2026-11-15: 1,067 of 1,069 units match; the owner ruled on 2 ([ADR-0007](adr/0007-letter-items-and-drift-check.md)) | The mismatch goes to the owner before any item depends on it |
 | Hazmat questions trigger safety refusals | Phase 4 | Refusals are their own outcome, reported and never counted as declines |
 | A newer edition appears | Any phase | The project stays on 2025. Moving would mean a new corpus version and every run redone |

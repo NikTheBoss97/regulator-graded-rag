@@ -116,6 +116,10 @@ letters stay eligible for held-out.
   first line of the Decision: a letter's only unnumbered question can be an item too. It
   also records how the question is rewritten, how citations are read, how a §171.8
   definition is compared and how a table section is decided.
+- 2026-11-20: [ADR-0022](0022-code-checks-and-an-audit-for-gold-items.md) supersedes
+  "The owner's check": code checks every draft; the owner judges the drafts it cannot
+  clear, audits a random 40 of the rest per split and reads every accepted question for
+  personal data; the audit's result is published.
 
 ## References
 
