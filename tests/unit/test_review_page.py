@@ -25,8 +25,11 @@ from regulator_graded_rag.review_page import (
     main,
     pending,
     render,
+    render_read,
     rewrite_draft,
+    start_line,
     to_check,
+    to_read,
 )
 from tests.unit.test_checks import letter
 
@@ -607,3 +610,276 @@ def test_code_verified_items_name_their_verifier() -> None:
     record = item_record(DRAFT, {}, date(2026, 11, 21), by="code checks 1")
     assert record["verified"] == "code checks 1, 2026-11-21"
     assert item_record(DRAFT, {}, date(2026, 11, 21))["verified"] == "owner, 2026-11-21"
+
+
+def send(draft: Draft) -> dict[str, str]:
+    """The form that sends one question from the read to the check."""
+    return {"token": "t", "action": "check", "id": draft.id}
+
+
+def location(server: _Review, path: str, form: dict[str, str]) -> str:
+    """Where a POST redirects."""
+    connection = http.client.HTTPConnection("127.0.0.1", server.port, timeout=10)
+    headers = {
+        "Host": f"127.0.0.1:{server.port}",
+        "Content-Type": "application/x-www-form-urlencoded",
+    }
+    connection.request("POST", path, body=urlencode(form), headers=headers)
+    response = connection.getresponse()
+    response.read()
+    connection.close()
+    return response.getheader("Location") or ""
+
+
+def reading_audit() -> Audit:
+    """A pool of three with the first draft sampled: LATER and THIRD are to be read."""
+    return Audit("dev", "1", "2026-11-21", (DRAFT.id, LATER.id, THIRD.id), (DRAFT.id,))
+
+
+def test_the_read_waits_for_the_audit(serve: Serve) -> None:
+    audit = reading_audit()
+    drafts = [DRAFT, LATER, THIRD]
+    assert to_read(drafts, {}, audit) == []
+    server, _, _ = serve(drafts, audit)
+    status, text = ask(server, "GET", "/read?token=t")
+    assert status == 200 and LATER.id not in text
+    assert "The read opens once the audit is done: 1 audit drafts left." in text
+    assert (
+        ask(server, "POST", form={"token": "t", "id": DRAFT.id, "action": "approve"})[0]
+        == 303
+    )
+    assert LATER.id in ask(server, "GET", "/read?token=t")[1]
+
+
+def test_the_read_list_is_the_pool_outside_the_sample() -> None:
+    audit = reading_audit()
+    outside = replace(
+        DRAFT, id="99-0009-Q1", letter="99-0009", letter_date="2019-01-01"
+    )
+    unkept = replace(THIRD, id="99-0008-Q1", kept=False)
+    audit = replace(audit, pool=(*audit.pool, unkept.id))
+    drafts = [THIRD, outside, unkept, LATER, DRAFT]
+    done = {DRAFT.id: "approve"}
+    assert to_read(drafts, done, audit) == [LATER, THIRD]
+    assert to_read(drafts, done | {LATER.id: "read"}, audit) == [THIRD]
+
+
+def test_reading_records_a_read_for_each_listed_question(serve: Serve) -> None:
+    server, drafts, decisions = serve([DRAFT, LATER, THIRD], reading_audit())
+    ask(server, "POST", form={"token": "t", "id": DRAFT.id, "action": "approve"})
+    before = drafts.read_bytes()
+    form = {"token": "t", "action": "read", "ids": f"{LATER.id} {THIRD.id} {DRAFT.id}"}
+    status, _ = ask(server, "POST", "/read", form)
+    assert status == 303
+    lines = [json.loads(x) for x in decisions.read_text(encoding="utf-8").splitlines()]
+    assert [(x["id"], x["action"], x["fields"], x["digest"]) for x in lines[1:]] == [
+        (LATER.id, "read", {}, digest(LATER)),
+        (THIRD.id, "read", {}, digest(THIRD)),
+    ]
+    assert drafts.read_bytes() == before
+    text = ask(server, "GET", "/read?token=t")[1]
+    assert "Every accepted question has been read." in text
+
+
+def test_a_question_sent_to_the_check_leaves_the_read_list(serve: Serve) -> None:
+    server, _, _ = serve([DRAFT, LATER, THIRD], reading_audit())
+    ask(server, "POST", form={"token": "t", "id": DRAFT.id, "action": "approve"})
+    listing = ask(server, "GET", "/read?token=t")[1]
+    assert "Send to the check" in listing and "Check this one" not in listing
+    assert ask(server, "POST", "/read", send(LATER))[0] == 303
+    assert LATER.id not in ask(server, "GET", "/read?token=t")[1]
+    status, text = ask(server, "GET", f"/?token=t&id={LATER.id}")
+    assert status == 200 and f"<h1>{LATER.id}</h1>" in text
+    edit = {"token": "t", "action": "edit", "id": LATER.id, "letter_date": "2021-04-02"}
+    assert ask(server, "POST", form=edit)[0] == 303
+    listing = ask(server, "GET", "/read?token=t")[1]
+    assert LATER.id not in listing and THIRD.id in listing
+    assert ask(server, "GET", f"/?token=t&id={LATER.id}")[0] == 404
+    status, text = ask(server, "GET", "/?token=t&id=nothing")
+    assert status == 404 and "No draft by that ID." in text
+
+
+def test_the_read_list_survives_a_restart(serve: Serve, tmp_path: Path) -> None:
+    server, drafts, decisions = serve([DRAFT, LATER, THIRD], reading_audit())
+    ask(server, "POST", form={"token": "t", "id": DRAFT.id, "action": "approve"})
+    ask(server, "POST", "/read", {"token": "t", "action": "read", "ids": LATER.id})
+    again = _Review(
+        0, "t", load_drafts(drafts), drafts, decisions, NO_TABLES, sorted(UNITS),
+        lambda draft: None, reading_audit(),
+    )  # fmt: skip
+    try:
+        assert again.reading == [THIRD]
+    finally:
+        again.server_close()
+
+
+def test_a_read_on_an_older_draft_does_not_count(tmp_path: Path) -> None:
+    audit = reading_audit()
+    path = tmp_path / "decisions.jsonl"
+    append_decision(path, Decision(DRAFT.id, "approve", {}, "x", digest(DRAFT)))
+    append_decision(path, Decision(LATER.id, "read", {}, "x", "an older draft's"))
+    actions = current_actions([DRAFT, LATER, THIRD], path)
+    assert to_read([DRAFT, LATER, THIRD], actions, audit) == [LATER, THIRD]
+
+
+def test_the_read_list_is_empty_after_two_changes(serve: Serve) -> None:
+    pool = (DRAFT.id, LATER.id, THIRD.id, "99-0004-Q1")
+    audit = Audit("dev", "1", "2026-11-21", pool, (DRAFT.id, LATER.id))
+    other = replace(THIRD, id="99-0004-Q1", letter="99-0004", letter_date="2023-01-01")
+    drafts = [DRAFT, LATER, THIRD, other]
+    done = {DRAFT.id: "edit", LATER.id: "reject"}
+    assert to_read(drafts, done, audit) == []
+    assert to_read(drafts, {DRAFT.id: "edit", LATER.id: "approve"}, audit) == [
+        THIRD,
+        other,
+    ]
+    server, _, _ = serve(drafts, audit)
+    edit = {"token": "t", "action": "edit", "letter_date": "2020-03-03"}
+    ask(server, "POST", form=edit | {"id": DRAFT.id})
+    ask(server, "POST", form=edit | {"id": LATER.id, "letter_date": "2021-04-02"})
+    text = ask(server, "GET", "/read?token=t")[1]
+    assert (
+        "The audit found two changes, so every accepted draft goes to the check."
+        in text
+    )
+    assert THIRD.id not in text
+
+
+def test_a_small_pool_leaves_nothing_to_read() -> None:
+    audit = Audit("dev", "1", "2026-11-21", (DRAFT.id, LATER.id), (DRAFT.id, LATER.id))
+    assert (
+        to_read([DRAFT, LATER], {DRAFT.id: "approve", LATER.id: "approve"}, audit) == []
+    )
+    assert "Every accepted question has been read." in render_read([], "t")
+
+
+def test_read_needs_the_host_and_the_token(serve: Serve) -> None:
+    server, _, decisions = serve([DRAFT, LATER, THIRD], reading_audit())
+    ask(server, "POST", form={"token": "t", "id": DRAFT.id, "action": "approve"})
+    lines = decisions.read_bytes()
+    form = {"action": "read", "ids": LATER.id}
+    evil = f"evil.example:{server.port}"
+    assert ask(server, "GET", "/read?token=t", host=evil)[0] == 403
+    assert ask(server, "GET", "/?token=t&id=" + LATER.id, host=evil)[0] == 403
+    assert ask(server, "POST", "/read", form | {"token": "t"}, host=evil)[0] == 403
+    assert ask(server, "GET", "/read")[0] == 404
+    assert ask(server, "GET", "/read?token=u")[0] == 404
+    assert ask(server, "GET", "/?id=" + LATER.id)[0] == 404
+    assert ask(server, "POST", "/read", form)[0] == 404
+    assert ask(server, "POST", "/read", form | {"token": "u"})[0] == 404
+    assert ask(server, "GET", "/other?token=t")[0] == 404
+    assert decisions.read_bytes() == lines
+
+
+def test_the_form_cannot_post_a_read() -> None:
+    form = {"token": "t", "action": "read"}
+    with pytest.raises(ValueError, match="action"):
+        decide(DRAFT, form, "t", NOW, tables=NO_TABLES, units=UNITS)
+
+
+def test_the_read_list_escapes_ids_and_questions() -> None:
+    odd = replace(LATER, id="99-0002-Q<b>", question="<script>x</script> Jane")
+    text = render_read([odd], "t&k")
+    assert "<script>" not in text and "&lt;script&gt;" in text and "Q<b>" not in text
+    assert 'name="ids" value="99-0002-Q&lt;b&gt;"' in text
+
+
+def test_an_empty_queue_points_to_the_read(serve: Serve) -> None:
+    server, _, _ = serve([DRAFT, LATER, THIRD], reading_audit())
+    ask(server, "POST", form={"token": "t", "id": DRAFT.id, "action": "approve"})
+    status, text = ask(server, "GET", "/?token=t")
+    assert status == 200 and "Every draft to check has a decision." in text
+    assert "2 accepted questions are left to read" in text
+    assert 'href="/read?token=t"' in text
+    ids = f"{LATER.id} {THIRD.id}"
+    ask(server, "POST", "/read", {"token": "t", "action": "read", "ids": ids})
+    status, text = ask(server, "GET", "/?token=t")
+    assert status == 200 and "left to read" not in text
+    assert (
+        "Every draft to check has a decision, and every accepted question has been"
+        " read. Stop the command with Ctrl+C." in text
+    )
+
+
+def test_the_start_line_counts_each_kind_of_draft() -> None:
+    reasoned = replace(THIRD, id="99-0004-Q1", letter="99-0004")
+    audit = Audit("dev", "1", "2026-11-21", (DRAFT.id, LATER.id, THIRD.id), (DRAFT.id,))
+    assert start_line([DRAFT, reasoned], audit, {}) == (
+        "2 to check: 1 with a reason, 1 in the audit sample"
+    )
+    # With the pool open, its drafts outside the sample are counted apart.
+    assert start_line([DRAFT, LATER, THIRD, reasoned], audit, {}) == (
+        "4 to check: 1 with a reason, 1 in the audit sample, 2 from the pool"
+    )
+    # A draft sent from the read is counted apart, and only when there is one.
+    sent = {LATER.id: "check"}
+    assert start_line([DRAFT, LATER, THIRD, reasoned], audit, sent) == (
+        "4 to check: 1 with a reason, 1 in the audit sample, 1 from the pool,"
+        " 1 sent from the read"
+    )
+    assert start_line([DRAFT, LATER], audit, sent) == (
+        "2 to check: 0 with a reason, 1 in the audit sample, 1 sent from the read"
+    )
+    assert start_line([], audit, {}) == (
+        "0 to check: 0 with a reason, 0 in the audit sample"
+    )
+
+
+def test_a_question_sent_to_the_check_cannot_be_read_in_bulk(serve: Serve) -> None:
+    server, _, decisions = serve([DRAFT, LATER, THIRD], reading_audit())
+    ask(server, "POST", form={"token": "t", "id": DRAFT.id, "action": "approve"})
+    status, _ = ask(server, "POST", "/read", send(LATER))
+    assert status == 303
+    lines = [json.loads(x) for x in decisions.read_text(encoding="utf-8").splitlines()]
+    assert (lines[-1]["id"], lines[-1]["action"]) == (LATER.id, "check")
+    assert lines[-1]["digest"] == digest(LATER)
+    ids = f"{LATER.id} {THIRD.id}"
+    ask(server, "POST", "/read", {"token": "t", "action": "read", "ids": ids})
+    lines = [json.loads(x) for x in decisions.read_text(encoding="utf-8").splitlines()]
+    assert [(x["id"], x["action"]) for x in lines[1:]] == [
+        (LATER.id, "check"),
+        (THIRD.id, "read"),
+    ]
+    assert server.queue == [LATER] and server.reading == []
+
+
+def test_a_sent_question_returns_to_the_read_after_its_decision(
+    serve: Serve,
+) -> None:
+    server, _, _ = serve([DRAFT, LATER, THIRD], reading_audit())
+    ask(server, "POST", form={"token": "t", "id": DRAFT.id, "action": "approve"})
+    assert location(server, "/read", send(LATER)) == f"/?token=t&id={LATER.id}"
+    edit = {"token": "t", "action": "edit", "id": LATER.id, "letter_date": "2021-04-02"}
+    assert location(server, "/", edit) == "/read?token=t"
+    assert server.queue == [] and server.reading == [THIRD]
+
+
+def test_a_check_mark_survives_a_restart(serve: Serve) -> None:
+    server, drafts, decisions = serve([DRAFT, LATER, THIRD], reading_audit())
+    ask(server, "POST", form={"token": "t", "id": DRAFT.id, "action": "approve"})
+    ask(server, "POST", "/read", send(LATER))
+    again = _Review(
+        0, "t", load_drafts(drafts), drafts, decisions, NO_TABLES, sorted(UNITS),
+        lambda draft: None, reading_audit(),
+    )  # fmt: skip
+    try:
+        assert again.queue == [LATER] and again.reading == [THIRD]
+    finally:
+        again.server_close()
+
+
+def test_the_form_cannot_post_a_check() -> None:
+    form = {"token": "t", "action": "check"}
+    with pytest.raises(ValueError, match="action"):
+        decide(DRAFT, form, "t", NOW, tables=NO_TABLES, units=UNITS)
+
+
+def test_a_forged_check_records_nothing(serve: Serve) -> None:
+    server, _, decisions = serve([DRAFT, LATER, THIRD], reading_audit())
+    # DRAFT is a sample draft and LATER is not yet to be read: neither is in the list.
+    assert location(server, "/read", send(DRAFT)) == "/read?token=t"
+    assert location(server, "/read", send(LATER)) == "/read?token=t"
+    assert location(server, "/read", send(replace(LATER, id="nothing"))) == (
+        "/read?token=t"
+    )
+    assert not decisions.exists()

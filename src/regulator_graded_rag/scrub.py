@@ -3,7 +3,8 @@
 
 The letter page names the requester's company and the person who wrote; those names,
 emails and North American phone numbers are replaced by a placeholder in the question
-text before any draft is written. The owner's check is the backstop for the rest.
+text before any draft is written. The owner's check, and for the drafts code accepts the owner's read (ADR-0022), is the
+backstop for the rest.
 """
 
 import re

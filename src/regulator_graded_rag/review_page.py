@@ -7,7 +7,9 @@ Usage: python -m regulator_graded_rag.review_page --split {dev,heldout}
 The page shows only the drafts the owner must judge (ADR-0022): those with a reason from
 the checks, and the audit's sample of the drafts code accepted, which is drawn first
 with python -m regulator_graded_rag.audit --split <split> --draw. Two changes in the
-sample send the whole pool. It shows one draft at a time, oldest letter first, with each
+sample send the whole pool. The accepted drafts outside the sample are listed at /read
+once the audit is done, for the owner to read their questions for personal data: one
+button records a read for each, and a link sends one to the check. It shows one draft at a time, oldest letter first, with each
 reason as a question, what code confirmed, and the letter's question and answer before
 the letter, which is folded. Buttons add the letter's context to the question, by fixed
 rules, and save nothing.
@@ -72,7 +74,8 @@ UNANSWERABLE = {
     "dev": Path("eval/dev/unanswerable.jsonl"),
     "heldout": Path("eval/heldout/unanswerable.jsonl"),
 }
-Action = Literal["approve", "edit", "reject"]
+Action = Literal["approve", "edit", "reject", "read", "check"]
+# The form offers these three; the read list alone records a read or a check.
 ACTIONS: tuple[Action, ...] = ("approve", "edit", "reject")
 _MAX_BODY = 1 << 20
 # The page runs no script and loads nothing: its style sheet is inline, and its form
@@ -311,7 +314,40 @@ def to_check(
             for draft in drafts
             if draft.kept
             and actions.get(draft.id) not in ACTIONS
-            and (everything or draft.id not in pool or draft.id in sample)
+            and (
+                everything
+                or draft.id not in pool
+                or draft.id in sample
+                or actions.get(draft.id) == "check"
+            )
+        ),
+        key=lambda draft: (draft.letter_date, draft.id),
+    )
+
+
+def audit_left(audit: Audit, actions: Mapping[str, str]) -> int:
+    """The sampled drafts the owner has not yet approved, edited or rejected."""
+    return sum(actions.get(name) not in ACTIONS for name in audit.sample)
+
+
+def to_read(
+    drafts: Iterable[Draft], actions: Mapping[str, str], audit: Audit
+) -> list[Draft]:
+    """The kept drafts of the audit's pool outside its sample, with no action at all,
+    oldest letter first: code accepted them, and the owner reads their questions for
+    personal data. The list stays empty until the sample is decided, and for good once
+    two sampled drafts have changed, since the whole pool then goes to the check."""
+    if audit_left(audit, actions) or changed(audit, actions) >= 2:
+        return []
+    pool, sample = set(audit.pool), set(audit.sample)
+    return sorted(
+        (
+            draft
+            for draft in drafts
+            if draft.kept
+            and draft.id in pool
+            and draft.id not in sample
+            and draft.id not in actions
         ),
         key=lambda draft: (draft.letter_date, draft.id),
     )
@@ -459,6 +495,38 @@ def render(
     return _page(f"{draft.id}: the owner's check", body)
 
 
+def render_read(drafts: Sequence[Draft], token: str) -> str:
+    """The questions to read, each with a form that sends it to the check, and one form
+    that records them all as read. Every text escaped, no script."""
+    e = html.escape
+    if not drafts:
+        return _message("Every accepted question has been read.", token)
+    items = "\n".join(
+        f"<li><b>{e(draft.id)}</b>: {e(draft.question)} "
+        '<form method="post" action="/read">'
+        f'<input type="hidden" name="token" value="{e(token)}">'
+        f'<input type="hidden" name="id" value="{e(draft.id)}">'
+        '<button name="action" value="check">Send to the check</button></form></li>'
+        for draft in drafts
+    )
+    ids = e(" ".join(draft.id for draft in drafts))
+    body = f"""<section>
+<h1>Accepted questions to read</h1>
+<p class="meta">Code accepted these. Read each question for personal data.</p>
+<ul>
+{items}
+</ul>
+<form method="post" action="/read">
+<input type="hidden" name="token" value="{e(token)}">
+<input type="hidden" name="ids" value="{ids}">
+<div class="actions">
+<button name="action" value="read">None of the rest holds personal data</button>
+</div>
+</form>
+</section>"""
+    return _page("The owner's read", body)
+
+
 class _Review(ThreadingHTTPServer):
     """The page's server, with the drafts still to check and where decisions go. units
     are the corpus's, in corpus order."""
@@ -484,6 +552,7 @@ class _Review(ThreadingHTTPServer):
         self.audit = audit
         self.actions = current_actions(all_drafts, decisions)
         self.queue = to_check(all_drafts, self.actions, audit)
+        self.reading = to_read(all_drafts, self.actions, audit)
         self.drafts_file = drafts
         self.decisions = decisions
         self.tables = tables
@@ -491,6 +560,11 @@ class _Review(ThreadingHTTPServer):
         self.units = frozenset(self.unit_order)
         self.letter = letter
         self.lock = threading.Lock()
+
+    def refresh(self) -> None:
+        """The lists again, after a decision or a read; the caller holds the lock."""
+        self.queue = to_check(self.drafts.values(), self.actions, self.audit)
+        self.reading = to_read(self.drafts.values(), self.actions, self.audit)
 
 
 class _Handler(BaseHTTPRequestHandler):
@@ -523,7 +597,9 @@ class _Handler(BaseHTTPRequestHandler):
                 HTTPStatus.FORBIDDEN, _message("This page answers only locally.")
             )
             return True
-        if urlsplit(self.path).path != "/" or not _has_token(token, self.review.token):
+        if urlsplit(self.path).path not in ("/", "/read") or not _has_token(
+            token, self.review.token
+        ):
             self._send(
                 HTTPStatus.NOT_FOUND, _message("Open the address the command printed.")
             )
@@ -531,14 +607,30 @@ class _Handler(BaseHTTPRequestHandler):
         return False
 
     def do_GET(self) -> None:
-        given = parse_qs(urlsplit(self.path).query).get("token", [""])[0]
+        url = urlsplit(self.path)
+        query = parse_qs(url.query)
+        given = query.get("token", [""])[0]
         if self._refused(given):
             return
+        token = self.review.token
         with self.review.lock:
-            draft = self.review.queue[0] if self.review.queue else None
-        if draft is None:
-            text = "Every kept draft has a decision. Stop the command with Ctrl+C."
-            self._send(HTTPStatus.OK, _message(text))
+            queue, reading = list(self.review.queue), list(self.review.reading)
+            left = audit_left(self.review.audit, self.review.actions)
+            changes = changed(self.review.audit, self.review.actions)
+        if url.path == "/read":
+            self._send(HTTPStatus.OK, self._read_list(reading, left, changes))
+            return
+        if "id" in query:
+            draft = next((d for d in queue + reading if d.id == query["id"][0]), None)
+            if draft is None:
+                self._send(
+                    HTTPStatus.NOT_FOUND, _message("No draft by that ID.", token)
+                )
+                return
+        elif queue:
+            draft = queue[0]
+        else:
+            self._send(HTTPStatus.OK, self._finished(len(reading)))
             return
         page = render(
             draft,
@@ -547,6 +639,31 @@ class _Handler(BaseHTTPRequestHandler):
             units=self.review.unit_order,
         )
         self._send(HTTPStatus.OK, page)
+
+    def _finished(self, unread: int) -> str:
+        """The page for an empty queue: the read still to do, or the end."""
+        done = "Every draft to check has a decision"
+        if not unread:
+            return _message(
+                f"{done}, and every accepted question has been read."
+                " Stop the command with Ctrl+C."
+            )
+        link = html.escape(f"/read?token={quote(self.review.token)}")
+        text = f"{done}. {unread} accepted questions are left to read."
+        return _message(text).replace(
+            "</section>", f'<p><a href="{link}">Read them</a></p></section>'
+        )
+
+    def _read_list(self, reading: list[Draft], left: int, changes: int) -> str:
+        """The read page: the list, or why it is empty."""
+        token = self.review.token
+        if left:
+            text = f"The read opens once the audit is done: {left} audit drafts left."
+        elif changes >= 2:
+            text = "The audit found two changes, so every accepted draft goes to the check."
+        else:
+            return render_read(reading, token)
+        return _message(text, token)
 
     def _with_context(
         self, draft: Draft, letter: LetterPage | None, form: Mapping[str, str]
@@ -567,6 +684,31 @@ class _Handler(BaseHTTPRequestHandler):
             units=self.review.unit_order,
         )
 
+    def _read(self, form: Mapping[str, str]) -> None:
+        """Record a read for each listed ID still to read, or a check for the one sent
+        to the check, and show the list again, or that draft."""
+        token = self.review.token
+        at = datetime.now(UTC).isoformat(timespec="seconds")
+        sent = form.get("action") == "check"
+        listed = set(
+            form.get("id", "").split() if sent else form.get("ids", "").split()
+        )
+        action: Action = "check" if sent else "read"
+        where = f"/read?token={token}"
+        with self.review.lock:
+            for draft in [d for d in self.review.reading if d.id in listed]:
+                append_decision(
+                    self.review.decisions,
+                    Decision(draft.id, action, {}, at, digest(draft)),
+                )
+                self.review.actions[draft.id] = action
+                if sent:
+                    where = f"/?token={token}&id={quote(draft.id)}"
+            self.review.refresh()
+            left = len(self.review.reading)
+        print(f"{action}; {left} left to read", flush=True)
+        self._send(HTTPStatus.SEE_OTHER, _message("Saved.", token), where)
+
     def do_POST(self) -> None:
         try:
             length = int(self.headers.get("Content-Length", ""))
@@ -580,8 +722,13 @@ class _Handler(BaseHTTPRequestHandler):
         if self._refused(form.get("token", "")):
             return
         token = self.review.token
+        if urlsplit(self.path).path == "/read":
+            self._read(form)
+            return
         with self.review.lock:
-            draft = next((d for d in self.review.queue if d.id == form.get("id")), None)
+            was = self.review.actions.get(form.get("id", ""))
+            open_drafts = self.review.queue + self.review.reading
+            draft = next((d for d in open_drafts if d.id == form.get("id")), None)
         if draft is None:
             self._send(HTTPStatus.BAD_REQUEST, _message("No draft by that ID.", token))
             return
@@ -618,12 +765,29 @@ class _Handler(BaseHTTPRequestHandler):
                 rewrite_draft(self.review.drafts_file, kept)
             self.review.drafts[draft.id] = kept
             self.review.actions[draft.id] = decision.action
-            self.review.queue = to_check(
-                self.review.drafts.values(), self.review.actions, self.review.audit
-            )
+            self.review.refresh()
             left = len(self.review.queue)
         print(f"{decision.id}: {decision.action}; {left} left to check", flush=True)
-        self._send(HTTPStatus.SEE_OTHER, _message("Saved.", token), f"/?token={token}")
+        where = f"/read?token={token}" if was == "check" else f"/?token={token}"
+        self._send(HTTPStatus.SEE_OTHER, _message("Saved.", token), where)
+
+
+def start_line(queue: Sequence[Draft], audit: Audit, actions: Mapping[str, str]) -> str:
+    """How many drafts wait, by why: a reason from the checks, the audit's sample, the
+    pool, which is in the queue only once two sampled drafts have changed, or the read,
+    which sent them."""
+    sampled = sum(d.id in audit.sample for d in queue)
+    sent = sum(d.id not in audit.sample and actions.get(d.id) == "check" for d in queue)
+    pooled = sum(
+        d.id in audit.pool and d.id not in audit.sample and actions.get(d.id) != "check"
+        for d in queue
+    )
+    line = (
+        f"{len(queue)} to check: {len(queue) - sampled - sent - pooled} with a reason,"
+        f" {sampled} in the audit sample"
+    )
+    line += f", {pooled} from the pool" if pooled else ""
+    return line + (f", {sent} sent from the read" if sent else "")
 
 
 def _letters(splits: Mapping[str, str]) -> Callable[[Draft], LetterPage | None]:
@@ -705,11 +869,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f"port {args.port}: {err.strerror}")
         return 1
     queue = server.queue
-    sampled = sum(d.id in audit.sample for d in queue)
-    print(
-        f"{len(queue)} to check: {len(queue) - sampled} with a reason,"
-        f" {sampled} in the audit sample"
-    )
+    print(start_line(queue, audit, server.actions))
+    print(f"{len(server.reading)} accepted questions to read at /read")
     print(f"Open http://127.0.0.1:{args.port}/?token={token}", flush=True)
     print("Stop with Ctrl+C; every decision is saved as it is made.", flush=True)
     with server:
