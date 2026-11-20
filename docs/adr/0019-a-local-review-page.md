@@ -86,6 +86,8 @@ chose a local page on 2026-11-14, and plan 2c built it.
   - Alt-key decisions and buttons add the letter's context by fixed rules.
   - `/read` lists the accepted questions to read for personal data, sends one to the
     check, or records the read of the rest.
+  - The committed drafts file now also holds the accepted questions the owner read for
+    personal data.
 
 ## References
 

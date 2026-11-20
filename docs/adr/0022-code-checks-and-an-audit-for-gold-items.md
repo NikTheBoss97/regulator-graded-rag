@@ -56,6 +56,8 @@ accept the other 104. On the 39 decided drafts, they flag all six that needed a 
   - the extractor's flags that need judgment: picture, not rewritten, answer continues,
     outside the corpus, known difference, date from the publish field, and scrubbed;
   - an unanswerable draft, which needs the owner's search of the corpus;
+  - a draft whose letter holds no question with its number;
+  - a draft whose verdict the letter's answer does not give;
   - a question ending with a colon, whose letter goes on with what it asks;
   - a pointer with no context in the question, such as "these packages" or "your
     scenario";
@@ -132,6 +134,9 @@ accept the other 104. On the 39 decided drafts, they flag all six that needed a 
   group to show whether results differ by provenance.
 - A draw fixes its pool and sample for good; a later version of the checks changes
   neither.
+- The audit is not blind: the owner can tell a sample draft by its lack of reasons, and
+  knows that two changes open the whole pool. The checks, version 1, were frozen before
+  the dev draw computed any audit key.
 - The decisions made so far stay valid, and those drafts count as checked by the owner.
 
 ## Left to the plan
