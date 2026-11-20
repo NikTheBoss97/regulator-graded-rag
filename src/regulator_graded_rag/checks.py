@@ -4,18 +4,20 @@
 A draft with no reason is accepted by code and covered by a random audit; a draft with
 one or more goes to the owner, each with what to look at. The reasons are cheap, shallow
 patterns: they find drafts to look at, and decide nothing. The letter's own paragraphs
-give the draft's context, scrubbed of the page's names.
+give the draft's context, scrubbed of the page's names and the salutation's.
 """
 
 import re
 from collections.abc import Sequence
 from dataclasses import dataclass
+from itertools import takewhile
 from typing import Final
 
 from regulator_graded_rag.citations import cite
 from regulator_graded_rag.drafts import Draft
 from regulator_graded_rag.extract import (
     _ANSWER,
+    _CLOSING,
     _QUESTION,
     _RESPONSE,
     Pair,
@@ -34,6 +36,14 @@ _ASKS = {
     "no letter": (
         "The letter's page is missing or unreadable: check the draft against the"
         " letter in the archive."
+    ),
+    "no question": (
+        "The letter holds no question {number} for this draft: check it against the"
+        " letter in the archive."
+    ),
+    "verdict": (
+        "The answer's first words do not give the draft's verdict: check the yes or no"
+        " against the letter."
     ),
     "unanswerable": (
         "Search the corpus first. If nothing in Parts 171-180 answers the question,"
@@ -130,7 +140,13 @@ def opening(page: LetterPage) -> str:
 
 
 def _scrubbed(text: str, page: LetterPage) -> str:
-    return scrub(text, page.company, page.individual).text
+    """The text scrubbed of the page's names, emails and phone numbers, then of each
+    name the name reason looks for, such as a surname in the salutation, as a whole
+    word and in case: no context a button adds holds a name the checks know."""
+    text = scrub(text, page.company, page.individual).text
+    for name in _surnames(page):
+        text = re.sub(rf"(?<!\w){re.escape(name)}(?!\w)", "[name]", text)
+    return text
 
 
 def _kept(sentences: list[str]) -> list[str]:
@@ -148,24 +164,37 @@ def _kept(sentences: list[str]) -> list[str]:
     ]
 
 
+def _ends_facts(paragraph: str) -> bool:
+    """Whether the paragraph is past the requester's facts: a numbered question or
+    answer, an asking clause, an answer's verdict, or the letter's closing."""
+    return bool(
+        _QUESTION.match(paragraph)
+        or _ANSWER.match(paragraph)
+        or asks(paragraph)
+        or verdict(paragraph) is not None
+        or _CLOSING.match(paragraph)
+    )
+
+
 def context_before(draft: Draft, page: LetterPage) -> str:
     """The requester's facts from the letter's opening, scrubbed; when the opening ends
-    with a colon, the paragraphs after it up to the first question as well."""
+    with a colon, the paragraphs after it as well, up to the first that asks, answers or
+    closes the letter. Nothing for an unnumbered draft whose opening asks its question,
+    since that question already holds the opening's facts."""
     start = next((i for i, p in enumerate(page.paragraphs) if _OPENING.match(p)), None)
-    if start is None:
+    if start is None or (not draft.numbered and asks(page.paragraphs[start])):
         return ""
     taken = [page.paragraphs[start]]
     if taken[0].rstrip().endswith(":"):
-        for paragraph in page.paragraphs[start + 1 :]:
-            if _QUESTION.match(paragraph):
-                break
-            taken.append(paragraph)
+        taken += takewhile(lambda p: not _ends_facts(p), page.paragraphs[start + 1 :])
     texts = (" ".join(_kept(_sentences(paragraph))) for paragraph in taken)
     return _scrubbed("\n".join(text for text in texts if text), page)
 
 
 def context_after(draft: Draft, page: LetterPage) -> str:
-    """The paragraphs between the draft's question and its answer, scrubbed."""
+    """The paragraphs after the draft's numbered question, up to the next question or
+    answer, scrubbed; nothing in an unnumbered letter, whose answer follows its
+    question."""
     paragraphs = page.paragraphs
     asked = next(
         (i for i, p in enumerate(paragraphs) if _number(_QUESTION, p) == draft.number),
@@ -177,7 +206,9 @@ def context_after(draft: Draft, page: LetterPage) -> str:
     )
     if asked is None or given is None or given <= asked:
         return ""
-    return _scrubbed("\n".join(paragraphs[asked + 1 : given]), page)
+    between = paragraphs[asked + 1 : given]
+    own = takewhile(lambda p: not (_QUESTION.match(p) or _ANSWER.match(p)), between)
+    return _scrubbed("\n".join(own), page)
 
 
 def _number(pattern: re.Pattern[str], paragraph: str) -> int | None:
@@ -221,11 +252,15 @@ def reasons(draft: Draft, page: LetterPage | None) -> list[Reason]:
     found: list[Reason] = []
 
     def add(kind: str, sentence: str = "") -> None:
-        ask = _ASKS[kind].format(outside=", ".join(draft.outside))
+        ask = _ASKS[kind].format(outside=", ".join(draft.outside), number=draft.number)
         found.append(Reason(kind, ask, sentence))
 
     if page is None:
         add("no letter")
+    elif pair is None:
+        add("no question")
+    elif draft.type != "unanswerable" and verdict(pair.answer) != draft.answer:
+        add("verdict")
     if draft.type == "unanswerable":
         add("unanswerable")
     if "picture" in draft.flags or mentions_picture(question, answer):
@@ -268,8 +303,9 @@ def ticks(
     draft: Draft, page: LetterPage | None, units: Sequence[str] = ()
 ) -> list[tuple[bool, str]]:
     """What code confirmed about the draft, each with whether it holds: the verdict,
-    every evidence label in the answer, and that the question holds no name. units, the
-    corpus's units in order, lets a range of sections give every member."""
+    every evidence label in the answer, and that the question holds no name from the
+    letter's salutation or name fields. units, the corpus's units in order, lets a range
+    of sections give every member."""
     if page is None:
         return []
     pair = pair_of(draft, page)
@@ -285,5 +321,10 @@ def ticks(
             for label in draft.evidence
         ]
     question = draft.question or (pair.question if pair else "")
-    checked.append((_named(question, page) is None, "The question holds no name"))
+    checked.append(
+        (
+            _named(question, page) is None,
+            "No name from the letter's salutation or name fields in the question",
+        )
+    )
     return checked

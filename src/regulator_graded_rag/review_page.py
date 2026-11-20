@@ -403,10 +403,11 @@ def render(
     form: Mapping[str, str] | None = None,
     units: Sequence[str] = (),
 ) -> str:
-    """One page: the draft's form, with its reasons and what code confirmed, beside the
-    letter's question and answer and then the letter folded, every text escaped, with
-    no script and nothing loaded. After a refused save, error says why; form keeps what
-    the owner typed, and units, the corpus's in order, lets the ticks read a range."""
+    """One page: the draft's form, with the reasons and what code confirmed for the
+    question its field shows, beside the letter's question and answer and then the
+    letter folded, every text escaped, with no script and nothing loaded. After a
+    refused save, error says why; form keeps what the owner typed, or what a context
+    button added, and units, the corpus's in order, lets the ticks read a range."""
     e = html.escape
     values = {
         "question": draft.question,
@@ -415,7 +416,8 @@ def render(
         "letter_date": draft.letter_date,
     }
     values |= {name: form[name] for name in values if form and name in form}
-    found = reasons(draft, page)
+    shown = replace(draft, question=values["question"])
+    found = reasons(shown, page)
     notes = [
         f"<li><b>{e(r.kind)}</b>: {e(r.ask)}"
         + (f" <i>{e(r.sentence)}</i>" if r.sentence else "")
@@ -424,7 +426,7 @@ def render(
     ]
     checked = "".join(
         f'<li class="{"ok" if holds else "bad"}">{"✓" if holds else "✗"} {e(text)}</li>'
-        for holds, text in ticks(draft, page, units)
+        for holds, text in ticks(shown, page, units)
     )
     buttons = ""
     if page is not None and context_before(draft, page):
@@ -432,7 +434,8 @@ def render(
             '<button name="action" value="before">'
             "Add the letter's context before the question</button>\n"
         )
-    if page is not None and any(r.kind == "colon" for r in found):
+    colon = any(r.kind == "colon" for r in found)
+    if page is not None and colon and context_after(draft, page):
         buttons += (
             '<button name="action" value="after">'
             "Add the next paragraph after the question</button>\n"
