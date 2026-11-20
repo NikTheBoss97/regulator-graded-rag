@@ -13,6 +13,6 @@ checked against the original publication: its title, authors, year and link.
 | [Retrieval](retrieval.md) | Keyword search, dense and hybrid retrieval, reranking and vector search. | 14 |
 | [The corpus and passages](corpus-and-passages.md) | Where the regulations and the letters come from, and how the regulations become passages. | 13 |
 | [Generation](generation.md) | Writing answers from retrieved passages, running models locally, and making answers checkable. | 18 |
-| [Evaluation](evaluation.md) | Gold questions, metrics, significance tests, the held-out split and failure analysis. | 24 |
+| [Evaluation](evaluation.md) | Gold questions, metrics, significance tests, the held-out split and failure analysis. | 26 |
 | [Security](security.md) | Prompt injection, corpus poisoning, model files that run code, and the local review page. | 10 |
 | [Engineering practice](engineering-practice.md) | Recording decisions, tests, CI, dependencies and personal data in the history. | 15 |
