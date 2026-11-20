@@ -126,6 +126,10 @@ requester speaks again.
     question, so the question is kept as written and flagged.
   - What the requester showed or sent ("as shown in your incoming email", "the example
     included with your email") is flagged with the pictures.
+- 2026-11-20: Under [ADR-0022](0022-code-checks-and-an-audit-for-gold-items.md), a date
+  taken from the publish date is a reason for the owner's check, where the owner
+  confirms it; a date from the letter's own first line raises none, so in the drafts
+  code accepts, the random audit covers it.
 
 ## References
 

@@ -17,9 +17,10 @@ Approve keeps the draft as drafted, Save edits keeps the owner's corrections, an
 drops it. Each decision is appended to the split's decisions file at once, with the
 digest of the draft it decides, so a draft extracted again is checked again. A rejected
 draft, or one whose question the owner rewrote, stays in the drafts file without its
-question, so only a question the owner approved as drafted reaches git. An edit is
-refused unless the item it makes passes the gold checks and cites only the corpus, and
-an edited evidence list brings the type it gives. Enter in a field submits nothing.
+question, so only a question the owner approved as drafted, or read for personal data,
+reaches git. An edit is refused unless the item it makes passes the gold checks and
+cites only the corpus, and an edited evidence list brings the type it gives. Enter in a
+field submits nothing.
 The page answers only on 127.0.0.1, to a request whose Host
 names that address or localhost; it changes nothing without the session's token and
 loads nothing from elsewhere. It opens only once the owner's unanswerable questions are
@@ -190,7 +191,8 @@ def _edited(
 def kept_as(draft: Draft, action: str, fields: Mapping[str, object]) -> Draft:
     """The draft as the drafts file keeps it after the owner's decision: without its
     question when the owner rejects it or rewrites the question, so that only a
-    question the owner approved as drafted reaches git (owner, 2026-11-16)."""
+    question the owner approved as drafted (owner, 2026-11-16), or read for personal
+    data (ADR-0022), reaches git."""
     if action == "reject" or "question" in fields:
         return replace(draft, question="")
     return draft

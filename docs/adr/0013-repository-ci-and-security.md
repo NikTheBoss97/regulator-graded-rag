@@ -89,6 +89,9 @@ filters, so a docs-only change cannot skip a check.
   the `.gitignore`, `.gitattributes` and licence, then the design. After ADR-0016's
   rewrite, the same history went straight to the recreated repository's `main` once
   more, before its ruleset was applied again.
+- 2026-11-20: Under [ADR-0022](0022-code-checks-and-an-audit-for-gold-items.md), the
+  owner checks each question that code's checks flag, audits a random sample of the
+  rest, and reads every question that reaches git for personal data.
 
 ## References
 

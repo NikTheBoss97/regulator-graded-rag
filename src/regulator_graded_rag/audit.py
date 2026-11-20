@@ -9,7 +9,7 @@ a random sample of 40 of those drafts for the owner to audit, by the committed s
 records the pool and the sample in eval/<split>/audit.json. The file is never rewritten:
 a second draw would let the checks be tuned until the sample looks right. The published
 bound is the exact one-sided 95% upper bound on how many of the drafts only code
-verified the owner would have changed, given how many of the sample he did change. The
+verified the owner would have changed, given how many sample drafts were changed. The
 command prints counts only. Held-out audits are drawn by the owner only.
 Exit code 0 when drawn, 1 when the audit exists or an input is missing, and 2 for a
 held-out draw without the owner's flag.
