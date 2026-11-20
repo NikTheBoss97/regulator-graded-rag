@@ -137,7 +137,7 @@ def _sentences(text: str) -> list[str]:
     return sentences
 
 
-def _asks(text: str) -> int:
+def asks(text: str) -> int:
     """How many asking clauses the text holds."""
     return len(_YOU_ASK.findall(text)) + len(_AND_ASK.findall(text))
 
@@ -190,7 +190,7 @@ def pairs(paragraphs: Sequence[str]) -> list[Pair]:
                 answer = "\n".join([first, *more])
                 found.append(Pair(number, asked[0], answer, True, bool(more)))
         return found
-    asking = [i for i, paragraph in enumerate(paragraphs) if _asks(paragraph)]
+    asking = [i for i, paragraph in enumerate(paragraphs) if asks(paragraph)]
     if len(asking) != 1 or asking[0] + 1 >= len(paragraphs):
         return []
     first = paragraphs[asking[0] + 1]
@@ -199,7 +199,7 @@ def pairs(paragraphs: Sequence[str]) -> list[Pair]:
     more = _following(paragraphs, asking[0] + 1)
     sentences = _sentences(paragraphs[asking[0]])
     # The letter's opening sentence goes, unless it asks the question itself.
-    if sentences and _RESPONSE.match(sentences[0]) and not _asks(sentences[0]):
+    if sentences and _RESPONSE.match(sentences[0]) and not asks(sentences[0]):
         sentences = sentences[1:]
     answer = "\n".join([first, *more])
     return [Pair(1, " ".join(sentences), answer, False, bool(more))]
@@ -213,9 +213,9 @@ def direct(question: str) -> str | None:
     letter; any other comma-ended phrase is a condition and stays ("For X, is it the
     case that Y?")."""
     sentences = _sentences(question)
-    asks = _asks(question)
-    if asks != 1 or _IF_SO.search(question):
-        if asks == 0 and question.rstrip().endswith("?"):
+    count = asks(question)
+    if count != 1 or _IF_SO.search(question):
+        if count == 0 and question.rstrip().endswith("?"):
             return question
         return None
     for i, sentence in enumerate(sentences):
