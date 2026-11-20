@@ -8,10 +8,12 @@ tracing failures to a stage. Part of the [reading list](README.md).
 ## Test collections and gold questions
 
 - ★ Mark Sanderson, [Test Collection Based Evaluation of Information Retrieval Systems](https://doi.org/10.1561/1500000009) (Foundations and Trends in Information Retrieval, 2010). The method this project's evaluation rests on: its measures, significance testing and the limits of the approach.
+- ★ Curtis G. Northcutt, Anish Athalye and Jonas Mueller, [Pervasive Label Errors in Test Sets Destabilize Machine Learning Benchmarks](https://datasets-benchmarks-proceedings.neurips.cc/paper_files/paper/2021/hash/f2217062e9a397a1dca429e7d70bc6ca-Abstract-round1.html) (NeurIPS Datasets and Benchmarks Track, 2021). Label errors average at least 3.3% across ten benchmark test sets, flagged by code and confirmed by people: why this project measures its own gold labels.
 - Pranab Islam et al., [FinanceBench: A New Benchmark for Financial Question Answering](https://arxiv.org/abs/2311.11944) (arXiv, 2023). A domain benchmark with answers and evidence strings, and a model for this project's gold format.
 - Jonathan H. Clark et al., [TyDi QA: A Benchmark for Information-Seeking Question Answering in Typologically Diverse Languages](https://doi.org/10.1162/tacl_a_00317) (TACL, 2020). Questions written by people who want the answer and don't know it yet, to avoid priming. The theory behind starting from real requesters' questions.
 - Tom Kwiatkowski et al., [Natural Questions: A Benchmark for Question Answering Research](https://doi.org/10.1162/tacl_a_00276) (TACL, 2019). Real search queries annotated against Wikipedia, with an analysis of how much human annotators vary: a reminder that gold labels are not perfect.
 - Pranav Rajpurkar, Robin Jia and Percy Liang, [Know What You Don't Know: Unanswerable Questions for SQuAD](https://doi.org/10.18653/v1/P18-2124) (ACL, 2018). Unanswerable questions written to look like answerable ones, which is why this project's must be plausible.
+- C. J. Clopper and E. S. Pearson, [The use of confidence or fiducial limits illustrated in the case of the binomial](https://doi.org/10.1093/biomet/26.4.404) (Biometrika 26(4), 404–413, 1934). The origin of the exact interval that the audit's bound follows, with the hypergeometric distribution of a finite pool.
 
 ## Metrics and significance tests
 

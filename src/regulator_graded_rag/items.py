@@ -4,7 +4,11 @@
 Usage: python -m regulator_graded_rag.items --split {dev,heldout} [--heldout-by-owner]
 [--freeze], from the repository root.
 
-Every kept draft needs the owner's decision on it as it now reads. Approve keeps the
+Every kept draft needs the owner's decision on it as it now reads, except in the
+audit's pool (ADR-0022): when eval/<split>/audit.json exists, a pool draft outside the
+audit sample that the owner has read for personal data becomes an item that code's
+checks verified, while fewer than two sampled drafts have changed. The command then
+prints the audit's bound. Approve keeps the
 draft as drafted, Save edits keeps it with the owner's fields, and Reject drops it. An
 item whose date or evidence the owner edited must pass the drift check again, or it is
 dropped. The owner's unanswerable questions for the split join the letter items, and all
@@ -23,6 +27,7 @@ from collections.abc import Callable, Iterable, Mapping, Sequence
 from datetime import date, datetime
 from pathlib import Path
 
+from regulator_graded_rag.audit import AUDIT, Audit, changed, describe, load_audit
 from regulator_graded_rag.drafts import DRAFTS, Draft, load_drafts
 from regulator_graded_rag.drift import check, parse_citation
 from regulator_graded_rag.ecfr import Cache, default_cache
@@ -51,23 +56,42 @@ def build(
     decisions: Mapping[str, Mapping[str, object]],
     unanswerable: Sequence[Item],
     recheck: Callable[[Item], bool],
+    audit: Audit | None = None,
 ) -> tuple[list[Item], Counter[str]]:
-    """The items, sorted by ID, and how many were kept, rejected, dropped on recheck,
-    and written by the owner. Every kept draft needs a decision on it as it now reads.
-    An approval keeps the draft as drafted and an edit keeps the edited fields; an item
-    whose date or evidence was edited must pass recheck, and every item the gold
-    checks."""
+    """The items, sorted by ID, and how many were kept, read, rejected, dropped on
+    recheck, and written by the owner. Every kept draft needs a decision on it as it now
+    reads, except the audit's: a pool draft outside the sample, while fewer than two
+    sampled drafts have changed, may instead have a read, and then code's checks verify
+    it. The undecided drafts are named before the unread ones, since the read opens
+    only once the sample is decided. An approval keeps the draft as drafted and an edit
+    keeps the edited fields; an item whose date or evidence was edited must pass
+    recheck, and every item the gold checks."""
     kept = [draft for draft in drafts if draft.kept]
+    current = {
+        draft.id: str(decisions[draft.id].get("action"))
+        for draft in kept
+        if decisions.get(draft.id, {}).get("digest") == digest(draft)
+    }
+    readable: set[str] = set()
+    if audit is not None and changed(audit, current) < 2:
+        readable = set(audit.pool) - set(audit.sample)
     undecided = [
         draft.id
         for draft in kept
-        if decisions.get(draft.id, {}).get("digest") != digest(draft)
+        if current.get(draft.id) not in ("approve", "edit", "reject")
+        and not (draft.id in readable and current.get(draft.id) in ("read", None))
     ]
     if undecided:
-        shown = ", ".join(undecided[:5]) + (", …" if len(undecided) > 5 else "")
         raise ValueError(
             f"{len(undecided)} undecided, with no decision on the draft as it now"
-            f" reads: {shown}"
+            f" reads: {_shown(undecided)}"
+        )
+    unread = [
+        draft.id for draft in kept if draft.id in readable and draft.id not in current
+    ]
+    if unread:
+        raise ValueError(
+            f"{len(unread)} not yet read for personal data: {_shown(unread)}"
         )
     counts: Counter[str] = Counter()
     built: list[Item] = []
@@ -76,6 +100,16 @@ def build(
         action = decision.get("action")
         if action == "reject":
             counts["rejected"] += 1
+            continue
+        if action == "read" and audit is not None:
+            by = f"code checks {audit.checks}"
+            built.append(
+                validate(
+                    item_record(draft, {}, date.fromisoformat(audit.drawn), by=by),
+                    draft.id,
+                )
+            )
+            counts["read"] += 1
             continue
         if action not in ("approve", "edit"):
             raise ValueError(f"{draft.id}: action: {action!r} is not a decision")
@@ -92,6 +126,11 @@ def build(
     if unanswerable:
         counts["the owner's"] += len(unanswerable)
     return sorted([*built, *unanswerable], key=lambda item: item.id), counts
+
+
+def _shown(names: Sequence[str]) -> str:
+    """The first five IDs, and an ellipsis when there are more."""
+    return ", ".join(names[:5]) + (", …" if len(names) > 5 else "")
 
 
 def _recheck(cache: Cache) -> Callable[[Item], bool]:
@@ -143,7 +182,16 @@ def main(argv: Sequence[str] | None = None) -> int:
         stray = next((name for name, s in splits.items() if s != args.split), None)
         if stray is not None:
             raise ValueError(f"{stray} belongs to another split than {args.split}")
-        built, counts = build(drafts, decisions, owners, _recheck(default_cache()))
+        path = AUDIT[args.split]
+        audit = load_audit(path) if path.is_file() else None
+        if audit is not None and audit.split != args.split:
+            raise ValueError(
+                f"{path.as_posix()} is the audit of the {audit.split} split, not of"
+                f" {args.split}"
+            )
+        built, counts = build(
+            drafts, decisions, owners, _recheck(default_cache()), audit
+        )
     except FileNotFoundError as err:
         print(f"{err.filename} is missing")
         return 1
@@ -158,6 +206,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     print(f"items: {len(written)}; {counted}")
     lowest = sorted(types.items(), key=lambda pair: (pair[1], pair[0]))
     print("by type, lowest first: " + ", ".join(f"{t} {n}" for t, n in lowest))
+    if audit is not None:
+        actions = {name: str(d.get("action")) for name, d in decisions.items()}
+        current = {
+            d.id: actions[d.id]
+            for d in drafts
+            if d.kept and decisions.get(d.id, {}).get("digest") == digest(d)
+        }
+        print(describe(audit, current, counts["read"], len(written)))
     if args.freeze:
         freeze(out, FROZEN, len(written))
         print(

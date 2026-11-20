@@ -75,6 +75,20 @@ chose a local page on 2026-11-14, and plan 2c built it.
 - Nothing the page shows leaves the machine, and the only letter text the committed
   drafts file keeps is what the owner approved as drafted.
 
+## Amendments
+
+- 2026-11-20: [ADR-0022](0022-code-checks-and-an-audit-for-gold-items.md) changes the
+  page:
+  - It shows only the drafts with a reason from code's checks and the audit sample, and
+    opens only once the audit is drawn.
+  - Each reason is asked as a question beside the sentence that raised it, with ticks
+    for what code confirmed. The question and its answer come before the folded letter.
+  - Alt-key decisions and buttons add the letter's context by fixed rules.
+  - `/read` lists the accepted questions to read for personal data, sends one to the
+    check, or records the read of the rest.
+  - The committed drafts file now also holds the accepted questions the owner read for
+    personal data.
+
 ## References
 
 - Python, [`http.server` — HTTP servers](https://docs.python.org/3.14/library/http.server.html) (Python documentation): not recommended for production, since it implements only basic security checks.
