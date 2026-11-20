@@ -207,10 +207,11 @@ def decide(
 ) -> Decision:
     """The owner's decision on a draft, from the page's form. A missing or wrong token
     is refused; so is an approval of an edited form, whose edits only Save edits keeps,
-    and an approval or edit whose item breaks a gold rule, naming the field, or cites a
-    unit outside units, the corpus's, which no run could retrieve. tables, the corpus's
-    table sections, types an edited evidence list. The decision's digest is of the
-    draft as the drafts file keeps it afterwards."""
+    an edit that changes nothing, which the audit would count as a change, and an
+    approval or edit whose item breaks a gold rule, naming the field, or cites a unit
+    outside units, the corpus's, which no run could retrieve. tables, the corpus's table
+    sections, types an edited evidence list. The decision's digest is of the draft as
+    the drafts file keeps it afterwards."""
     if not _has_token(form.get("token", ""), token):
         raise ValueError(
             "token: missing or wrong; open the address the command printed"
@@ -226,6 +227,11 @@ def decide(
         raise ValueError(
             f"{draft.id}: {', '.join(fields)}: edited; Save edits keeps the edits, and"
             " reloading the page brings back the draft as drafted"
+        )
+    if action == "edit" and not fields:
+        raise ValueError(
+            f"{draft.id}: nothing changed; Save edits keeps an edited field, and"
+            " Approve as drafted keeps the draft as drafted"
         )
     item = validate(item_record(draft, fields, now.date()), draft.id)
     outside = [
@@ -686,13 +692,17 @@ class _Handler(BaseHTTPRequestHandler):
 
     def _read(self, form: Mapping[str, str]) -> None:
         """Record a read for each listed ID still to read, or a check for the one sent
-        to the check, and show the list again, or that draft."""
+        to the check, and show the list again, or that draft. Any other action records
+        nothing."""
         token = self.review.token
         at = datetime.now(UTC).isoformat(timespec="seconds")
         sent = form.get("action") == "check"
-        listed = set(
-            form.get("id", "").split() if sent else form.get("ids", "").split()
-        )
+        if sent:
+            listed = set(form.get("id", "").split())
+        elif form.get("action") == "read":
+            listed = set(form.get("ids", "").split())
+        else:
+            listed = set()
         action: Action = "check" if sent else "read"
         where = f"/read?token={token}"
         with self.review.lock:
