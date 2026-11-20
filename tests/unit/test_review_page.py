@@ -7,11 +7,13 @@ from collections.abc import Callable, Iterator
 from dataclasses import replace
 from datetime import UTC, date, datetime
 from pathlib import Path
+from typing import Any
 from urllib.parse import urlencode
 
 import pytest
 
-from regulator_graded_rag.audit import Audit
+from regulator_graded_rag import review_page
+from regulator_graded_rag.audit import Audit, write_audit
 from regulator_graded_rag.drafts import Draft, load_drafts, write_drafts
 from regulator_graded_rag.letter_page import LetterPage
 from regulator_graded_rag.review_page import (
@@ -315,6 +317,7 @@ def serve(tmp_path: Path) -> Iterator[Serve]:
             sorted(UNITS),
             letter_of,
             audit,
+            current_actions(drafts, decisions),
         )
         threading.Thread(target=server.serve_forever, daemon=True).start()
         started.append(server)
@@ -702,6 +705,83 @@ def test_the_page_needs_the_audit(
     assert "regulator_graded_rag.audit --split dev --draw" in out
 
 
+@pytest.fixture
+def page_main(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> Callable[[Audit], int]:
+    """main from an empty folder holding a draft, the unanswerable questions and the
+    given audit, with the corpus and the letters' split stubbed out and a server that
+    stops at once, so a page that should not open cannot hang the test."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(review_page, "load_split", lambda path: {})
+    monkeypatch.setattr(review_page, "load_manifest", lambda path: None)
+    monkeypatch.setattr(review_page, "read_passages", lambda path, manifest: [])
+    monkeypatch.setattr(_Review, "serve_forever", lambda self, poll_interval=0.5: None)
+    write_drafts(tmp_path / "drafts.jsonl", [DRAFT])
+    (tmp_path / "unanswerable.jsonl").write_text("", encoding="utf-8")
+
+    def run(audit: Audit) -> int:
+        write_audit(tmp_path / "eval" / "dev" / "audit.json", audit)
+        return main(
+            [
+                "--split",
+                "dev",
+                "--port",
+                "0",
+                "--drafts",
+                str(tmp_path / "drafts.jsonl"),
+                "--decisions",
+                str(tmp_path / "decisions.jsonl"),
+                "--unanswerable",
+                str(tmp_path / "unanswerable.jsonl"),
+            ]
+        )
+
+    return run
+
+
+def test_the_page_refuses_another_splits_audit(
+    page_main: Callable[[Audit], int], capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert page_main(replace(NO_AUDIT, split="heldout")) == 1
+    out = capsys.readouterr().out
+    assert "eval/dev/audit.json is the audit of the heldout split, not of dev" in out
+    assert "Open http" not in out
+
+
+def test_a_malformed_decision_is_an_input_error(
+    page_main: Callable[[Audit], int],
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    # A line cut short, as by a crash while it was written.
+    (tmp_path / "decisions.jsonl").write_text('{"id": "99-0001-Q1"\n', encoding="utf-8")
+    assert page_main(NO_AUDIT) == 1
+    assert capsys.readouterr().out.startswith("an input is wrong: ")
+
+
+def test_an_unreadable_decisions_file_is_no_port_error(
+    page_main: Callable[[Audit], int],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    decisions = tmp_path / "decisions.jsonl"
+    decisions.write_text("", encoding="utf-8")
+    read_text = Path.read_text
+
+    def refused(path: Path, *args: Any, **kwargs: Any) -> str:
+        if path.name == "decisions.jsonl":
+            raise PermissionError(13, "Permission denied", str(path))
+        return read_text(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "read_text", refused)
+    assert page_main(NO_AUDIT) == 1
+    out = capsys.readouterr().out
+    assert f"{decisions} cannot be read: Permission denied" in out
+    assert "port" not in out
+
+
 def test_code_verified_items_name_their_verifier() -> None:
     record = item_record(DRAFT, {}, date(2026, 11, 21), by="code checks 1")
     assert record["verified"] == "code checks 1, 2026-11-21"
@@ -799,9 +879,10 @@ def test_the_read_list_survives_a_restart(serve: Serve, tmp_path: Path) -> None:
     server, drafts, decisions = serve([DRAFT, LATER, THIRD], reading_audit())
     ask(server, "POST", form={"token": "t", "id": DRAFT.id, "action": "approve"})
     ask(server, "POST", "/read", {"token": "t", "action": "read", "ids": LATER.id})
+    loaded = load_drafts(drafts)
     again = _Review(
-        0, "t", load_drafts(drafts), drafts, decisions, NO_TABLES, sorted(UNITS),
-        lambda draft: None, reading_audit(),
+        0, "t", loaded, drafts, decisions, NO_TABLES, sorted(UNITS),
+        lambda draft: None, reading_audit(), current_actions(loaded, decisions),
     )  # fmt: skip
     try:
         assert again.reading == [THIRD]
@@ -954,9 +1035,10 @@ def test_a_check_mark_survives_a_restart(serve: Serve) -> None:
     server, drafts, decisions = serve([DRAFT, LATER, THIRD], reading_audit())
     ask(server, "POST", form={"token": "t", "id": DRAFT.id, "action": "approve"})
     ask(server, "POST", "/read", send(LATER))
+    loaded = load_drafts(drafts)
     again = _Review(
-        0, "t", load_drafts(drafts), drafts, decisions, NO_TABLES, sorted(UNITS),
-        lambda draft: None, reading_audit(),
+        0, "t", loaded, drafts, decisions, NO_TABLES, sorted(UNITS),
+        lambda draft: None, reading_audit(), current_actions(loaded, decisions),
     )  # fmt: skip
     try:
         assert again.queue == [LATER] and again.reading == [THIRD]

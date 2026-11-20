@@ -1,4 +1,6 @@
 # Author: Nicola Antonello
+import html
+import json
 import random
 from dataclasses import replace
 from datetime import date
@@ -18,8 +20,8 @@ from regulator_graded_rag.audit import (
     write_audit,
 )
 from regulator_graded_rag.checks import CHECKS
-from regulator_graded_rag.drafts import Draft
-from regulator_graded_rag.letter_page import LetterPage
+from regulator_graded_rag.drafts import Draft, write_drafts
+from regulator_graded_rag.letter_page import ARTICLE_CLASS, RESPONSE, LetterPage
 from regulator_graded_rag.split import SEED, draw_key
 
 QUESTION = "Is it the case that the marking must be durable?"
@@ -153,6 +155,34 @@ def test_a_held_out_draw_needs_the_owners_flag(
 ) -> None:
     monkeypatch.chdir(tmp_path)
     assert audit.main(["--split", "heldout", "--draw"]) == 2
+
+
+def article(page: LetterPage) -> str:
+    """An invented letter page in the article layout, holding the page's paragraphs."""
+    text = "".join(f"<p>{html.escape(p)}</p>" for p in page.paragraphs)
+    return (
+        f'<html><body><article class="{ARTICLE_CLASS}"><p><strong>{RESPONSE}'
+        f"</strong></p>{text}</article></body></html>"
+    )
+
+
+def test_the_draw_prints_the_pool_the_sample_and_the_drafts_with_a_reason(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    lost = replace(DRAFT, id="99-0002-Q1", letter="99-0002")  # its page is missing
+    dev = tmp_path / "eval" / "dev"
+    write_drafts(dev / "drafts.jsonl", [DRAFT, lost])
+    (dev / "unanswerable.jsonl").write_text("", encoding="utf-8")
+    rows = "".join(
+        json.dumps({"letter": d.letter, "split": "dev"}) + "\n" for d in (DRAFT, lost)
+    )
+    (tmp_path / "eval" / "split.jsonl").write_text(rows, encoding="utf-8")
+    letters = tmp_path / "eval" / "letters" / "dev"
+    letters.mkdir(parents=True)
+    (letters / "99-0001.html").write_text(article(PAGE), encoding="utf-8")
+    assert audit.main(["--split", "dev", "--draw"]) == 0
+    assert capsys.readouterr().out == "pool 1, sample 1, with a reason 1\n"
 
 
 def test_describe_states_the_bound_three_ways() -> None:
