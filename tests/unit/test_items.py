@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 from regulator_graded_rag import items, unanswerable
+from regulator_graded_rag.audit import Audit, write_audit
 from regulator_graded_rag.drafts import Draft, write_drafts
 from regulator_graded_rag.gold import Item, load_items, write_items
 from regulator_graded_rag.items import build, latest
@@ -181,3 +182,101 @@ def test_held_out_items_need_the_owners_flag(
     assert items.main(["--split", "heldout"]) == 2
     assert items.main(["--split", "heldout", "--freeze"]) == 2
     assert unanswerable.main([]) == 2
+
+
+def audited(pool: list[Draft], sample: list[Draft]) -> Audit:
+    return Audit(
+        "dev", "1", "2026-11-21", tuple(d.id for d in pool), tuple(d.id for d in sample)
+    )
+
+
+def test_a_read_pool_draft_is_verified_by_code() -> None:
+    audit = audited([A, B], [A])
+    decisions = latest([decided(A, "approve"), decided(B, "read")])
+    built, counts = build([A, B], decisions, [], always, audit)
+    assert built[1].verified == "code checks 1, 2026-11-21"
+    assert counts == Counter({"kept": 1, "read": 1})
+
+
+def test_a_sample_draft_needs_the_owners_decision() -> None:
+    audit = audited([A, B], [A])
+    decisions = latest([decided(A, "read"), decided(B, "read")])
+    with pytest.raises(ValueError, match="undecided"):
+        build([A, B], decisions, [], always, audit)
+
+
+def test_a_check_mark_is_undecided() -> None:
+    audit = audited([A, B], [A])
+    decisions = latest([decided(A, "approve"), decided(B, "check")])
+    with pytest.raises(ValueError, match="undecided"):
+        build([A, B], decisions, [], always, audit)
+
+
+def test_an_unread_pool_draft_stops_the_build() -> None:
+    audit = audited([A, B], [A])
+    with pytest.raises(ValueError, match="not yet read for personal data"):
+        build([A, B], latest([decided(A, "approve")]), [], always, audit)
+
+
+def test_two_changes_need_a_decision_on_every_pool_draft() -> None:
+    audit = audited([A, B, C], [A, B])
+    decisions = latest(
+        [
+            decided(A, "reject"),
+            decided(B, "edit", {"question": "Does § 171.1 apply to a carrier?"}),
+            decided(C, "read"),
+        ]
+    )
+    with pytest.raises(ValueError, match="undecided"):
+        build([A, B, C], decisions, [], always, audit)
+    decisions = latest([*decisions.values(), decided(C, "approve")])
+    built, counts = build([A, B, C], decisions, [], always, audit)
+    assert counts["read"] == 0
+    assert [item.verified for item in built] == ["owner, 2026-11-20"] * 2
+
+
+def test_an_old_read_does_not_build() -> None:
+    audit = audited([A, B], [A])
+    old = decided(B, "read") | {"digest": "an older draft's"}
+    with pytest.raises(ValueError, match="not yet read for personal data"):
+        build([A, B], latest([decided(A, "approve"), old]), [], always, audit)
+
+
+def test_without_an_audit_every_kept_draft_needs_a_decision() -> None:
+    with pytest.raises(ValueError, match="undecided"):
+        build([A], latest([decided(A, "read")]), [], always)
+
+
+def _audited_build(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, audit: Audit, other: str
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    dev = tmp_path / "eval" / "dev"
+    write_drafts(dev / "drafts.jsonl", [A, B])
+    lines = [decided(A, "approve"), decided(B, other)]
+    (dev / "decisions.jsonl").write_text(
+        "".join(json.dumps(line) + "\n" for line in lines), encoding="utf-8"
+    )
+    write_items(dev / "unanswerable.jsonl", [])
+    write_audit(dev / "audit.json", audit)
+
+
+def test_the_build_prints_the_audit(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    _audited_build(tmp_path, monkeypatch, audited([A, B], [A]), "read")
+    assert items.main(["--split", "dev"]) == 0
+    assert "audit: 0 of" in capsys.readouterr().out
+
+
+def test_a_whole_pool_audit_prints_no_bound(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    _audited_build(tmp_path, monkeypatch, audited([A, B], [A, B]), "approve")
+    assert items.main(["--split", "dev"]) == 0
+    out = capsys.readouterr().out
+    assert "the owner checked the whole pool" in out
