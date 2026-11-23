@@ -3,7 +3,7 @@ import html
 import http.client
 import json
 import threading
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterable, Iterator
 from dataclasses import replace
 from datetime import UTC, date, datetime
 from pathlib import Path
@@ -15,9 +15,15 @@ import pytest
 from regulator_graded_rag import review_page
 from regulator_graded_rag.audit import Audit, write_audit
 from regulator_graded_rag.drafts import Draft, load_drafts, write_drafts
+from regulator_graded_rag.ecfr import Cache
+from regulator_graded_rag.fetch import FetchError, Response
+from regulator_graded_rag.gold import Item, validate
 from regulator_graded_rag.letter_page import LetterPage
 from regulator_graded_rag.review_page import (
     Decision,
+    Drift,
+    _drift,
+    _page_cache,
     _Review,
     allowed_host,
     append_decision,
@@ -37,6 +43,7 @@ from regulator_graded_rag.review_page import (
     to_read,
 )
 from tests.unit.test_checks import letter
+from tests.unit.test_ecfr import PAGE
 
 DRAFT = Draft(
     id="99-0001-Q1",
@@ -86,6 +93,12 @@ DEFINED = replace(
     drift={"171.8(Hazmat%20employee)": "unchanged"},
 )
 WITH_171_8 = UNITS | {"171.8"}
+WHOLE = {"token": "t", "action": "edit", "evidence": "171.8"}
+
+
+def unchanged(item: Item) -> dict[str, str]:
+    """A drift check that finds every label reading the same."""
+    return {label: "unchanged" for label in item.evidence}
 
 
 @pytest.mark.parametrize(
@@ -204,6 +217,98 @@ def test_an_unanswerable_drafts_evidence_is_stored_as_typed() -> None:
     form = {"token": "t", "action": "edit", "evidence": typed}
     decision = decide(draft, form, "t", NOW, tables=NO_TABLES, units=UNITS)
     assert decision.fields == {"evidence": [typed]}
+
+
+def test_an_edit_that_fails_the_drift_check_is_refused_with_its_labels() -> None:
+    with pytest.raises(ValueError, match=r"171\.8 changed.*Reject"):
+        decide(
+            DEFINED,
+            WHOLE,
+            "t",
+            NOW,
+            tables=NO_TABLES,
+            units=WITH_171_8,
+            drift=lambda item: {"171.8": "changed"},
+        )
+
+
+def test_an_edit_whose_labels_read_the_same_is_saved() -> None:
+    decision = decide(
+        DEFINED, WHOLE, "t", NOW, tables=NO_TABLES, units=WITH_171_8, drift=unchanged
+    )
+    assert decision.action == "edit"
+
+
+def test_an_edited_date_alone_rechecks_every_label() -> None:
+    seen: list[tuple[str, tuple[str, ...]]] = []
+
+    def drift(item: Item) -> dict[str, str]:
+        seen.append((item.letter_date, item.evidence))
+        return unchanged(item)
+
+    two = replace(
+        DRAFT,
+        evidence=("171.1(a)", "172.101"),
+        drift={"171.1(a)": "unchanged", "172.101": "unchanged"},
+    )
+    form = {"token": "t", "action": "edit", "letter_date": "2020-03-03"}
+    decide(two, form, "t", NOW, tables=NO_TABLES, units=UNITS, drift=drift)
+    assert seen == [("2020-03-03", ("171.1(a)", "172.101"))]
+
+
+def test_the_drift_adapter_gives_each_label_its_outcome(tmp_path: Path) -> None:
+    def get(url: str) -> Response:
+        if "/2019-06-03/" in url:
+            return Response(404, "text/html", b"Not found")
+        return Response(200, "text/html", PAGE.encode())
+
+    draft = replace(DRAFT, evidence=("173.9(a)", "173.9"), letter_date="2019-06-03")
+    item = validate(item_record(draft, {}, NOW.date()), draft.id)
+    drift = _drift(Cache(tmp_path, get))
+    assert drift(item) == {"173.9(a)": "missing", "173.9": "missing"}
+    later = replace(item, letter_date="2021-06-01")
+    assert drift(later) == {"173.9(a)": "unchanged", "173.9": "unchanged"}
+
+
+def test_approvals_question_edits_and_unanswerable_evidence_skip_the_drift_check() -> (
+    None
+):
+    def drift(item: Item) -> dict[str, str]:
+        raise AssertionError("the drift check ran")
+
+    question = {"token": "t", "action": "edit", "question": "Does § 171.1 apply?"}
+    unanswerable = replace(
+        DRAFT, type="unanswerable", answer="", evidence=("x",), drift={}
+    )
+    searched = {"token": "t", "action": "edit", "evidence": "Parts 171-180"}
+    approve = {"token": "t", "action": "approve"}
+    for draft, form in ((DRAFT, approve), (DRAFT, question), (unanswerable, searched)):
+        decide(draft, form, "t", NOW, tables=NO_TABLES, units=UNITS, drift=drift)
+
+
+def test_an_unreachable_ecfr_refuses_a_save_within_seconds(tmp_path: Path) -> None:
+    waited: list[float] = []
+
+    def get(url: str) -> Response:
+        raise OSError("no route to host")
+
+    drift = _drift(_page_cache(tmp_path, get, waited.append))
+    with pytest.raises(ValueError, match="try again"):
+        decide(
+            DEFINED, WHOLE, "t", NOW, tables=NO_TABLES, units=WITH_171_8, drift=drift
+        )
+    # The build's polite waits are 10, 60 and 300 seconds; the owner waits on a save.
+    assert 0 < sum(waited) < 10
+
+
+def test_a_drift_check_that_cannot_reach_ecfr_refuses_the_save() -> None:
+    def drift(item: Item) -> dict[str, str]:
+        raise FetchError("https://www.ecfr.gov/x: failed after 3 attempts")
+
+    with pytest.raises(ValueError, match="try again"):
+        decide(
+            DEFINED, WHOLE, "t", NOW, tables=NO_TABLES, units=WITH_171_8, drift=drift
+        )
 
 
 def test_approving_an_edited_form_is_refused() -> None:
@@ -346,6 +451,8 @@ def serve(tmp_path: Path) -> Iterator[Serve]:
         drafts: list[Draft],
         audit: Audit = NO_AUDIT,
         letter_of: Callable[[Draft], LetterPage | None] = lambda draft: None,
+        drift: Drift = unchanged,
+        units: Iterable[str] = tuple(sorted(UNITS)),
     ) -> tuple[_Review, Path, Path]:
         path = tmp_path / "drafts.jsonl"
         write_drafts(path, drafts)
@@ -357,10 +464,11 @@ def serve(tmp_path: Path) -> Iterator[Serve]:
             path,
             decisions,
             NO_TABLES,
-            sorted(UNITS),
+            units,
             letter_of,
             audit,
             current_actions(drafts, decisions),
+            drift=drift,
         )
         threading.Thread(target=server.serve_forever, daemon=True).start()
         started.append(server)
@@ -945,6 +1053,7 @@ def test_the_read_list_survives_a_restart(serve: Serve, tmp_path: Path) -> None:
     again = _Review(
         0, "t", loaded, drafts, decisions, NO_TABLES, sorted(UNITS),
         lambda draft: None, reading_audit(), current_actions(loaded, decisions),
+        drift=unchanged,
     )  # fmt: skip
     try:
         assert again.reading == [THIRD]
@@ -1120,6 +1229,7 @@ def test_a_check_mark_survives_a_restart(serve: Serve) -> None:
     again = _Review(
         0, "t", loaded, drafts, decisions, NO_TABLES, sorted(UNITS),
         lambda draft: None, reading_audit(), current_actions(loaded, decisions),
+        drift=unchanged,
     )  # fmt: skip
     try:
         assert again.queue == [LATER] and again.reading == [THIRD]
@@ -1153,3 +1263,13 @@ def test_a_read_needs_the_read_action(serve: Serve, action: dict[str, str]) -> N
     assert location(server, "/read", form) == "/read?token=t"
     assert decisions.read_bytes() == lines
     assert server.reading == [LATER, THIRD]
+
+
+def test_the_page_refuses_an_edit_that_fails_the_drift_check(serve: Serve) -> None:
+    server, drafts, decisions = serve(
+        [DEFINED], drift=lambda item: {"171.8": "changed"}, units=sorted(WITH_171_8)
+    )
+    before = drafts.read_bytes()
+    status, text = ask(server, "POST", form=WHOLE | {"id": DEFINED.id})
+    assert status == 400 and "171.8 changed" in text
+    assert drafts.read_bytes() == before and not decisions.exists()
