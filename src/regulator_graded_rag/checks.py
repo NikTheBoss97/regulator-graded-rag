@@ -287,16 +287,37 @@ def reasons(draft: Draft, page: LetterPage | None) -> list[Reason]:
     return found
 
 
+def _term(label: str) -> str | None:
+    """A definition label's term, with the key's "%20" read as spaces; None for any
+    other label."""
+    match = _DEFINITION.fullmatch(label)
+    return None if match is None else match[1].replace("%20", " ")
+
+
 def _cited(label: str, cited: Sequence[str], answer: str) -> bool:
     """Whether the answer cites the label. A definition label, "171.8(Term)", needs the
-    answer to cite § 171.8 and hold the term (the key's "%20" read as spaces)."""
+    answer to cite § 171.8, in any form the extractor reads ("49 CFR 171.8", "§§ 171.1
+    and 171.8"), and to hold the term, or either name of a key that names two ("Package
+    or Outside Package"), as the extractor reads such keys."""
     if label in cited:
         return True
-    match = _DEFINITION.fullmatch(label)
-    if match is None:
+    term = _term(label)
+    if term is None:
         return False
-    term = match[1].replace("%20", " ").lower()
-    return bool(_SECTION_171_8.search(answer)) and term in answer.lower()
+    names = re.split(r"\s+or\s+", term.lower())
+    text = answer.lower()
+    section = any(other.split("(")[0] == "171.8" for other in cited)
+    section = section or bool(_SECTION_171_8.search(answer))
+    return section and any(name in text for name in names)
+
+
+def _tick_text(label: str) -> str:
+    """The tick's words. A definition label says which definition the answer names,
+    since the answer itself cites only § 171.8."""
+    term = _term(label)
+    if term is None:
+        return f"The answer cites {label}"
+    return f'The answer cites § 171.8 and names "{term}"'
 
 
 def ticks(
@@ -317,8 +338,7 @@ def ticks(
         cited = cite(pair.answer, {}, units).corpus if pair else ()
         text = pair.answer if pair else ""
         checked += [
-            (_cited(label, cited, text), f"The answer cites {label}")
-            for label in draft.evidence
+            (_cited(label, cited, text), _tick_text(label)) for label in draft.evidence
         ]
     question = draft.question or (pair.question if pair else "")
     checked.append(

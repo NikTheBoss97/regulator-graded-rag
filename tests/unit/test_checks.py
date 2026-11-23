@@ -478,7 +478,45 @@ def test_a_definition_label_gets_its_tick() -> None:
     )
     page = letter(f"Q1. {QUESTION}", f"A1. {answer}")
     draft = replace(DRAFT, evidence=("171.8(Hazardous%20waste)",), answer="no")
-    assert (True, "The answer cites 171.8(Hazardous%20waste)") in ticks(draft, page)
+    got = ticks(draft, page)
+    assert (True, 'The answer cites § 171.8 and names "Hazardous waste"') in got
+
+
+TOXIC = (
+    "171.8(Material%20poisonous%20by%20inhalation%20or%20Material%20toxic%20by"
+    "%20inhalation)"
+)
+TOXIC_TEXT = (
+    'The answer cites § 171.8 and names "Material poisonous by inhalation or'
+    ' Material toxic by inhalation"'
+)
+
+
+@pytest.mark.parametrize(
+    "named", ["material poisonous by inhalation", "material toxic by inhalation"]
+)
+def test_a_two_name_definition_ticks_on_either_name(named: str) -> None:
+    answer = f"The answer is yes. The tank holds a {named} as defined in § 171.8."
+    page = letter(f"Q1. {QUESTION}", f"A1. {answer}")
+    assert (True, TOXIC_TEXT) in ticks(replace(DRAFT, evidence=(TOXIC,)), page)
+
+
+@pytest.mark.parametrize(
+    "cites", ["as defined in 49 CFR 171.8", "as defined in §§ 171.1 and 171.8"]
+)
+def test_a_definition_ticks_however_the_answer_cites_171_8(cites: str) -> None:
+    answer = f"The answer is yes. A hazmat employee, {cites}, must be trained."
+    page = letter(f"Q1. {QUESTION}", f"A1. {answer}")
+    draft = replace(DRAFT, evidence=("171.8(Hazmat%20employee)",))
+    got = ticks(draft, page)
+    assert (True, 'The answer cites § 171.8 and names "Hazmat employee"') in got
+
+
+def test_a_definition_the_answer_does_not_name_gets_no_tick() -> None:
+    page = letter(f"Q1. {QUESTION}", "A1. The answer is yes. See § 171.8.")
+    draft = replace(DRAFT, evidence=("171.8(Hazmat%20employee)",))
+    got = ticks(draft, page)
+    assert (False, 'The answer cites § 171.8 and names "Hazmat employee"') in got
 
 
 def test_a_section_range_member_gets_its_tick() -> None:
