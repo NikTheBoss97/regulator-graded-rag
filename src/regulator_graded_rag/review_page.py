@@ -19,8 +19,10 @@ digest of the draft it decides, so a draft extracted again is checked again. A r
 draft, or one whose question the owner rewrote, stays in the drafts file without its
 question, so only a question the owner approved as drafted, or read for personal data,
 reaches git. An edit is refused unless the item it makes passes the gold checks and
-cites only the corpus, and an edited evidence list brings the type it gives. Enter in a
-field submits nothing.
+cites only the corpus, and an edited evidence list brings the type it gives. An edit to
+the evidence or the date must also pass the drift check again, as the build reruns it,
+or be refused with the labels that fail. A §171.8 definition label shows its spaces and
+is stored with "%20". Enter in a field submits nothing.
 The page answers only on 127.0.0.1, to a request whose Host
 names that address or localhost; it changes nothing without the session's token and
 loads nothing from elsewhere. It opens only once the owner's unanswerable questions are
@@ -38,6 +40,7 @@ import os
 import re
 import secrets
 import threading
+import time
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from collections.abc import Set as AbstractSet
 from dataclasses import asdict, dataclass, replace
@@ -59,13 +62,17 @@ from regulator_graded_rag.checks import (
 )
 from regulator_graded_rag.citations import Cited, item_type, table_units
 from regulator_graded_rag.drafts import DRAFTS, Draft, load_drafts, write_drafts
+from regulator_graded_rag.drift import check, parse_citation
+from regulator_graded_rag.ecfr import DEFAULT_CACHE, ECFR_INTERVAL, Cache
 from regulator_graded_rag.extract import EXTRACTOR
-from regulator_graded_rag.gold import EDITION, validate
+from regulator_graded_rag.fetch import FetchError, Get, http_get
+from regulator_graded_rag.gold import EDITION, Item, validate
 from regulator_graded_rag.index import read_passages
 from regulator_graded_rag.letter_page import LetterPage, read_page
 from regulator_graded_rag.letters import SPLIT_FILE, letter_path
 from regulator_graded_rag.manifest import DEFAULT_MANIFEST, load_manifest
 from regulator_graded_rag.passages import DEFAULT_OUT
+from regulator_graded_rag.polite import Paced
 from regulator_graded_rag.split import load_split
 
 DECISIONS = {
@@ -77,6 +84,10 @@ UNANSWERABLE = {
     "heldout": Path("eval/heldout/unanswerable.jsonl"),
 }
 Action = Literal["approve", "edit", "reject", "read", "check"]
+# Each evidence label's drift outcome on the item's letter date (ADR-0007).
+Drift = Callable[[Item], Mapping[str, str]]
+# The page's wait before it retries eCFR once; the build keeps polite.WAITS.
+PAGE_WAITS = (2.0,)
 # The form offers these three; the read list alone records a read or a check.
 ACTIONS: tuple[Action, ...] = ("approve", "edit", "reject")
 _MAX_BODY = 1 << 20
@@ -224,14 +235,17 @@ def decide(
     *,
     tables: AbstractSet[str],
     units: AbstractSet[str],
+    drift: Drift | None = None,
 ) -> Decision:
     """The owner's decision on a draft, from the page's form. A missing or wrong token
     is refused; so is an approval of an edited form, whose edits only Save edits keeps,
     an edit that changes nothing, which the audit would count as a change, and an
     approval or edit whose item breaks a gold rule, naming the field, or cites a unit
     outside units, the corpus's, which no run could retrieve. tables, the corpus's table
-    sections, types an edited evidence list. The decision's digest is of the draft as
-    the drafts file keeps it afterwards."""
+    sections, types an edited evidence list. drift, when given, rechecks an answerable
+    item whose evidence or date was edited, and refuses it when a label does not read
+    the same, as the build would drop it. The decision's digest is of the draft as the
+    drafts file keeps it afterwards."""
     if not _has_token(form.get("token", ""), token):
         raise ValueError(
             "token: missing or wrong; open the address the command printed"
@@ -264,8 +278,59 @@ def decide(
             f"{draft.id}: evidence: {', '.join(outside)} not in the corpus; other"
             " parts' rules are not evidence, since no run can retrieve them"
         )
+    rechecked = action == "edit" and ("evidence" in fields or "letter_date" in fields)
+    if drift is not None and rechecked and item.answerable:
+        _check_drift(draft.id, item, drift)
     kept = kept_as(draft, action, fields)
     return Decision(draft.id, cast(Action, action), fields, at, digest(kept))
+
+
+def _check_drift(name: str, item: Item, drift: Drift) -> None:
+    """Refuses an edited item that the build would drop on its drift check, naming each
+    label that does not read the same; an eCFR it cannot reach refuses the save too."""
+    try:
+        outcomes = drift(item)
+    except FetchError as err:
+        raise ValueError(
+            f"{name}: the drift check could not reach eCFR ({err}); try again"
+        ) from err
+    failing = [
+        f"{plain_label(label)} {outcome}"
+        for label, outcome in outcomes.items()
+        if outcome != "unchanged"
+    ]
+    if failing:
+        raise ValueError(
+            f"{name}: the drift check finds {', '.join(failing)} from the letter's"
+            f" date, {item.letter_date}, to the edition, so the build would drop this"
+            " item. Keep a citation that reads the same, such as the definition the"
+            " answer names, or Reject."
+        )
+
+
+def _page_cache(
+    root: Path = DEFAULT_CACHE,
+    get: Get | None = None,
+    sleep: Callable[[float], None] = time.sleep,
+) -> Cache:
+    """eCFR's cached pages for the drift check on a save. Requests are spaced as for the
+    build, but a failed one is retried once, after PAGE_WAITS, since the owner waits on
+    the save: an unreachable eCFR refuses it in seconds, not the build's minutes."""
+    fetch = get or (lambda url: http_get(url, accept_gzip=True))
+    paced = Paced(fetch, interval=ECFR_INTERVAL, waits=PAGE_WAITS, sleep=sleep)
+    return Cache(root, paced)
+
+
+def _drift(cache: Cache) -> Drift:
+    """The drift check of an item's evidence on its letter date, as the build reruns it
+    for an edited date or evidence (ADR-0007)."""
+
+    def outcomes(item: Item) -> dict[str, str]:
+        day = date.fromisoformat(item.letter_date)
+        found = check(map(parse_citation, item.evidence), day, cache)
+        return {citation.label: outcome for citation, outcome in found.items()}
+
+    return outcomes
 
 
 def allowed_host(host: str, port: int) -> bool:
@@ -578,8 +643,11 @@ class _Review(ThreadingHTTPServer):
         letter: Callable[[Draft], LetterPage | None],
         audit: Audit,
         actions: Mapping[str, str],
+        *,
+        drift: Drift,
     ) -> None:
         super().__init__(("127.0.0.1", port), _Handler)
+        self.drift = drift
         self.port = int(self.server_address[1])  # the bound one, when port is 0
         self.token = token
         self.drafts = {draft.id: draft for draft in all_drafts}
@@ -782,6 +850,7 @@ class _Handler(BaseHTTPRequestHandler):
                 datetime.now(UTC),
                 tables=self.review.tables,
                 units=self.review.units,
+                drift=self.review.drift,
             )
         except ValueError as err:
             page = render(
@@ -922,6 +991,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             _letters(splits),
             audit,
             actions,
+            drift=_drift(_page_cache()),
         )
     except OSError as err:
         print(f"port {args.port}: {err.strerror}")
