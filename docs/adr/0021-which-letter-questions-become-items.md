@@ -139,6 +139,19 @@ requester speaks again.
   taken from the publish date is a reason for the owner's check, where the owner
   confirms it; a date from the letter's own first line raises none, so in the drafts
   code accepts, the random audit covers it.
+- 2026-11-23: On the dev check the owner replaced the definition labels of 16 drafts,
+  18 labels in all, with the whole §171.8, since PHMSA's answer cites only "§ 171.8"
+  and the page crossed some labels.
+  Every crossed label was a key that names two terms, whose answer uses one of them: a
+  fault of the page, fixed by the
+  [ADR-0019](0019-a-local-review-page.md#amendments) amendment of this date. The whole
+  §171.8 changed after 13 of those letters' dates, so the drift check dropped 13 items.
+  The owner ruled to keep this ADR's rule: a definition label is the narrower citation
+  of the definition the answer names, and the owner keeps it. The 13 were re-decided on
+  the fixed page and are items again. The other 3 keep the whole §171.8, which read the
+  same from their letters' dates to the edition and scores the same. With the 13 back,
+  14 of the dev set's 220 letter items come from drafts that also cite rules outside
+  the corpus, the counts the 2026-11-17 entry gives as 12 of 207.
 
 ## References
 

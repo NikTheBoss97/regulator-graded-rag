@@ -88,6 +88,19 @@ chose a local page on 2026-11-14, and plan 2c built it.
     check, or records the read of the rest.
   - The committed drafts file now also holds the accepted questions the owner read for
     personal data.
+- 2026-11-23: After the owner replaced the §171.8 definition labels of 16 dev drafts
+  ([ADR-0021](0021-which-letter-questions-become-items.md#amendments)), the page treats
+  them so:
+  - The evidence box and the drift table show a definition key with spaces,
+    `171.8(Hazmat employee)`, and the page writes `%20` back when it saves, so an
+    untouched form still approves as drafted. An unanswerable draft's free-text
+    evidence is shown and kept as typed.
+  - A definition's tick says which definition the answer names, however the answer
+    cites § 171.8, and a key that names two ticks on either name.
+  - Save edits that changes the evidence or the date runs the drift check first and is
+    refused, naming each label that does not read the same, since the build would drop
+    the item. An eCFR the page cannot reach refuses the save too, after one retry two
+    seconds later rather than the build's waits of minutes.
 
 ## References
 
