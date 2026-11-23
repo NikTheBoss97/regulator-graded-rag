@@ -656,6 +656,25 @@ def test_the_page_serves_the_pool_after_two_changes(serve: Serve) -> None:
     assert THIRD.id in ask(server, "GET", "/?token=t")[1]
 
 
+def test_the_page_says_once_that_the_pool_goes_to_the_check(
+    serve: Serve, capsys: pytest.CaptureFixture[str]
+) -> None:
+    pool = (DRAFT.id, LATER.id, THIRD.id)
+    audit = Audit("dev", "1", "2026-11-21", pool, (DRAFT.id, LATER.id))
+    server, _, _ = serve([DRAFT, LATER, THIRD], audit)
+    edit = {"token": "t", "action": "edit"}
+    ask(server, "POST", form=edit | {"id": DRAFT.id, "letter_date": "2020-03-03"})
+    assert capsys.readouterr().out == f"{DRAFT.id}: edit; 1 left to check\n"
+    ask(server, "POST", form=edit | {"id": LATER.id, "letter_date": "2021-04-02"})
+    assert capsys.readouterr().out == (
+        f"{LATER.id}: edit; 1 left to check\n"
+        "The audit found two changes, so every accepted draft goes to the check.\n"
+        "1 to check: 0 with a reason, 0 in the audit sample, 1 from the pool\n"
+    )
+    ask(server, "POST", form={"token": "t", "action": "approve", "id": THIRD.id})
+    assert capsys.readouterr().out == f"{THIRD.id}: approve; 0 left to check\n"
+
+
 def test_a_read_is_not_an_owner_decision(tmp_path: Path) -> None:
     audit = Audit("dev", "1", "2026-11-21", (DRAFT.id, LATER.id), (DRAFT.id,))
     path = tmp_path / "decisions.jsonl"
@@ -920,6 +939,25 @@ def test_the_read_list_is_empty_after_two_changes(serve: Serve) -> None:
         in text
     )
     assert THIRD.id not in text
+
+
+def test_the_read_says_the_pool_went_to_the_check_while_sample_drafts_wait(
+    serve: Serve,
+) -> None:
+    other = replace(THIRD, id="99-0004-Q1", letter="99-0004", letter_date="2023-01-01")
+    pool = (DRAFT.id, LATER.id, THIRD.id, other.id)
+    audit = Audit("dev", "1", "2026-11-21", pool, (DRAFT.id, LATER.id, THIRD.id))
+    server, _, _ = serve([DRAFT, LATER, THIRD, other], audit)
+    edit = {"token": "t", "action": "edit", "letter_date": "2020-03-03"}
+    ask(server, "POST", form=edit | {"id": DRAFT.id})
+    ask(server, "POST", form=edit | {"id": LATER.id, "letter_date": "2021-04-02"})
+    # THIRD, a sampled draft, is still undecided, as on dev after two changes.
+    text = ask(server, "GET", "/read?token=t")[1]
+    assert (
+        "The audit found two changes, so every accepted draft goes to the check."
+        in text
+    )
+    assert "The read opens once the audit is done" not in text
 
 
 def test_a_small_pool_leaves_nothing_to_read() -> None:

@@ -79,6 +79,8 @@ Action = Literal["approve", "edit", "reject", "read", "check"]
 # The form offers these three; the read list alone records a read or a check.
 ACTIONS: tuple[Action, ...] = ("approve", "edit", "reject")
 _MAX_BODY = 1 << 20
+# Said on the read page and in the terminal once two sampled drafts have changed.
+_TWO_CHANGES = "The audit found two changes, so every accepted draft goes to the check."
 # The page runs no script and loads nothing: its style sheet is inline, and its form
 # posts back to it alone.
 _CSP = (
@@ -670,10 +672,10 @@ class _Handler(BaseHTTPRequestHandler):
     def _read_list(self, reading: list[Draft], left: int, changes: int) -> str:
         """The read page: the list, or why it is empty."""
         token = self.review.token
-        if left:
+        if changes >= 2:
+            text = _TWO_CHANGES
+        elif left:
             text = f"The read opens once the audit is done: {left} audit drafts left."
-        elif changes >= 2:
-            text = "The audit found two changes, so every accepted draft goes to the check."
         else:
             return render_read(reading, token)
         return _message(text, token)
@@ -774,6 +776,7 @@ class _Handler(BaseHTTPRequestHandler):
             self._send(HTTPStatus.BAD_REQUEST, page)
             return
         with self.review.lock:
+            before = changed(self.review.audit, self.review.actions)
             # The decision first: if the rewrite then fails, the digests differ, and
             # the draft comes back for a new decision rather than losing its question.
             append_decision(self.review.decisions, decision)
@@ -784,7 +787,16 @@ class _Handler(BaseHTTPRequestHandler):
             self.review.actions[draft.id] = decision.action
             self.review.refresh()
             left = len(self.review.queue)
-        print(f"{decision.id}: {decision.action}; {left} left to check", flush=True)
+            opened = ""
+            if before < 2 <= changed(self.review.audit, self.review.actions):
+                split = start_line(
+                    self.review.queue, self.review.audit, self.review.actions
+                )
+                opened = f"\n{_TWO_CHANGES}\n{split}"
+        print(
+            f"{decision.id}: {decision.action}; {left} left to check{opened}",
+            flush=True,
+        )
         where = f"/read?token={token}" if was == "check" else f"/?token={token}"
         self._send(HTTPStatus.SEE_OTHER, _message("Saved.", token), where)
 
