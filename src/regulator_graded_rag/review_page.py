@@ -35,6 +35,7 @@ import hashlib
 import html
 import json
 import os
+import re
 import secrets
 import threading
 from collections.abc import Callable, Iterable, Mapping, Sequence
@@ -161,6 +162,18 @@ def item_record(
     return record | dict(fields)
 
 
+def plain_label(label: str) -> str:
+    """An evidence label as the page shows it: a §171.8 definition key's "%20" read as
+    spaces, so 171.8(Hazmat%20employee) reads 171.8(Hazmat employee)."""
+    return label.replace("%20", " ")
+
+
+def stored_label(text: str) -> str:
+    """A label as the owner typed it, as the drafts keep it: stripped, with each space
+    inside a parenthesis written "%20", the way eCFR keys a definition."""
+    return re.sub(r"\([^()]*\)", lambda part: part[0].replace(" ", "%20"), text.strip())
+
+
 def _has_token(given: str, token: str) -> bool:
     return secrets.compare_digest(given.encode(), token.encode())
 
@@ -180,7 +193,10 @@ def _edited(
             fields[name] = form[name].strip()
     if "evidence" in form:
         lines = (line.strip() for line in form["evidence"].splitlines())
-        evidence = [line for line in lines if line]
+        typed = [line for line in lines if line]
+        # An unanswerable draft's evidence is free text, kept as the owner typed it.
+        free = draft.type == "unanswerable"
+        evidence = typed if free else [stored_label(line) for line in typed]
         if tuple(evidence) != draft.evidence:
             fields["evidence"] = evidence
             if evidence and draft.type != "unanswerable":
@@ -416,7 +432,10 @@ def render(
     values = {
         "question": draft.question,
         "answer": draft.answer,
-        "evidence": "\n".join(draft.evidence),
+        "evidence": "\n".join(
+            label if draft.type == "unanswerable" else plain_label(label)
+            for label in draft.evidence
+        ),
         "letter_date": draft.letter_date,
     }
     values |= {name: form[name] for name in values if form and name in form}
@@ -460,7 +479,7 @@ def render(
             f'<select id="answer" name="answer">{options}</select>'
         )
     drift = "".join(
-        f"<tr><td>{e(label)}</td><td>{e(outcome)}</td></tr>"
+        f"<tr><td>{e(plain_label(label))}</td><td>{e(outcome)}</td></tr>"
         for label, outcome in draft.drift.items()
     )
     whole = "\n".join(

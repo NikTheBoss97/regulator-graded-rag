@@ -27,10 +27,12 @@ from regulator_graded_rag.review_page import (
     item_record,
     main,
     pending,
+    plain_label,
     render,
     render_read,
     rewrite_draft,
     start_line,
+    stored_label,
     to_check,
     to_read,
 )
@@ -78,6 +80,12 @@ THIRD = replace(
 NO_AUDIT = Audit("dev", "1", "2026-11-21", (), ())
 ANSWER = "The answer is yes. A person who marks a packaging is subject to § 171.1(a)."
 FACTS = "You state that Jane Doe ships widgets by road."
+DEFINED = replace(
+    DRAFT,
+    evidence=("171.8(Hazmat%20employee)",),
+    drift={"171.8(Hazmat%20employee)": "unchanged"},
+)
+WITH_171_8 = UNITS | {"171.8"}
 
 
 @pytest.mark.parametrize(
@@ -161,6 +169,41 @@ def test_an_unanswerable_items_evidence_may_say_what_was_searched() -> None:
     form = {"token": "t", "action": "edit", "evidence": "Parts 171-180 for 107.105"}
     decision = decide(draft, form, "t", NOW, tables=NO_TABLES, units=UNITS)
     assert decision.fields == {"evidence": ["Parts 171-180 for 107.105"]}
+
+
+def test_the_page_shows_definition_labels_with_spaces() -> None:
+    text = render(DEFINED, None, "t")
+    assert ">171.8(Hazmat employee)</textarea>" in text
+    assert "<td>171.8(Hazmat employee)</td>" in text
+
+
+def test_an_untouched_form_approves_a_definition_label_as_drafted() -> None:
+    form = {"token": "t", "action": "approve", "evidence": "171.8(Hazmat employee)"}
+    decision = decide(DEFINED, form, "t", NOW, tables=NO_TABLES, units=WITH_171_8)
+    assert (decision.action, decision.fields) == ("approve", {})
+
+
+@pytest.mark.parametrize(
+    ("typed", "stored"),
+    [
+        ("171.8(Hazmat employee)", "171.8(Hazmat%20employee)"),
+        ("  171.8(Self-defense spray)(1) ", "171.8(Self-defense%20spray)(1)"),
+        ("172.101", "172.101"),
+    ],
+)
+def test_a_label_is_stored_with_its_spaces_written_percent_twenty(
+    typed: str, stored: str
+) -> None:
+    assert stored_label(typed) == stored
+    assert stored_label(plain_label(stored)) == stored
+
+
+def test_an_unanswerable_drafts_evidence_is_stored_as_typed() -> None:
+    draft = replace(DRAFT, type="unanswerable", answer="", evidence=("x",), drift={})
+    typed = "Searched the definitions (as listed) in 171.8"
+    form = {"token": "t", "action": "edit", "evidence": typed}
+    decision = decide(draft, form, "t", NOW, tables=NO_TABLES, units=UNITS)
+    assert decision.fields == {"evidence": [typed]}
 
 
 def test_approving_an_edited_form_is_refused() -> None:
