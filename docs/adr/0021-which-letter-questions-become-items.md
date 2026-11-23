@@ -126,6 +126,15 @@ requester speaks again.
     question, so the question is kept as written and flagged.
   - What the requester showed or sent ("as shown in your incoming email", "the example
     included with your email") is flagged with the pictures.
+- 2026-11-17: The owner ruled that a draft whose verdict also depends on a rule outside
+  the corpus stays, with only its in-corpus citations as evidence, as the Decision
+  implies. The first such draft asked whether a driver needs a hazmat endorsement, which
+  Part 383 governs, for a Class 9 shipment, and §172.504(f)(9) decided it: a Class 9
+  placard is not required for domestic transportation.
+  [ADR-0022](0022-code-checks-and-an-audit-for-gold-items.md)'s bar sets the limit: a
+  draft whose deciding rule is in a document outside the corpus is rejected. Of the dev
+  set's 207 letter items, 12 come from such drafts; the drafts file's `outside` field
+  names their other rules, so results can be reported with and without them.
 - 2026-11-20: Under [ADR-0022](0022-code-checks-and-an-audit-for-gold-items.md), a date
   taken from the publish date is a reason for the owner's check, where the owner
   confirms it; a date from the letter's own first line raises none, so in the drafts
