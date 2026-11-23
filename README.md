@@ -30,8 +30,13 @@ passages with [the printed pages](corpus/parse-review.md): 20 match, and 5 diffe
 in that the page sets A₁ and A₂ as subscripts, which
 [ADR-0017](docs/adr/0017-passage-text-from-the-xml.md#amendments) keeps as plain text.
 Phase 2 (evaluation) is in progress: 903 regulator letters are split into dev and
-held-out by a committed seed, and BM25 in SQL and the evaluation harness are built. This
-is not compliance or legal advice.
+held-out by a committed seed, and BM25 in SQL and the evaluation harness are built. The
+dev gold set holds 237 questions, 207 from the letters and 30 written by the owner for
+the system to decline; by type, `unanswerable` 36, `table` 41, `multi_passage` 45 and
+`lookup` 115. The owner checked every one: code's checks accepted 104 drafts, but the
+owner changed 13 of the 40 audited at random, so all 104 went to the owner too
+([ADR-0022](docs/adr/0022-code-checks-and-an-audit-for-gold-items.md)). This is not
+compliance or legal advice.
 
 ## Results
 
