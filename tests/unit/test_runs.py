@@ -1,5 +1,6 @@
 # Author: Nicola Antonello
 import json
+import subprocess
 from dataclasses import asdict
 from datetime import date
 from pathlib import Path
@@ -274,6 +275,20 @@ def test_the_header_counts_spending_and_held_out_runs(tmp_path: Path) -> None:
     git = dev["git"]
     assert isinstance(git, dict) and len(git["commit"]) == 40
     assert isinstance(git["dirty"], bool)
+
+
+def test_the_header_names_the_code_tree(tmp_path: Path) -> None:
+    # A rebase merge gives the commit a new ID but keeps its tree (ADR-0012).
+    gold = tmp_path / "items.jsonl"
+    gold.write_text("", encoding="utf-8")
+    git = header(Fake(), gold, [], "dev", "c" * 64, tmp_path, Path("."))["git"]
+    tree = subprocess.run(
+        ["git", "rev-parse", "HEAD^{tree}"],
+        capture_output=True,
+        encoding="utf-8",
+        check=True,
+    ).stdout.strip()
+    assert isinstance(git, dict) and git["tree"] == tree
 
 
 def test_the_gold_path_is_recorded_without_the_home_folder(tmp_path: Path) -> None:
