@@ -12,7 +12,7 @@ A run is one folder, eval/runs/<YYYY-MM-DD>-<retriever>-<split>-<n>/:
   how many held-out runs there have been;
 - questions.jsonl, one line per question, written as it finishes: its ID and type, its
   top 50 passage IDs with their scores, and its time, never its text;
-- scores.json, recomputed from the stored hits.
+- scores.json, recomputed from the stored hits, naming the gold set's version.
 Every item is searched, unanswerable ones included, and only answerable items are
 scored. A run stopped midway, by closing the laptop, resumes with the settings it started
 with. Held-out runs are started by the owner only, and read only the frozen items, whose
@@ -289,9 +289,17 @@ def run_retrieval(
     return run
 
 
-def score_run(folder: Path, items: Sequence[Item]) -> list[Summary]:
-    """Score the answerable items from the run's stored hits, write scores.json and
-    return the summary rows; refused unless the run holds exactly these items."""
+def score_run(folder: Path, items: Sequence[Item], version: str) -> list[Summary]:
+    """Score the answerable items from the run's stored hits, write scores.json with
+    the gold set's version, and return the summary rows; refused unless the run ran on
+    that version of the gold set and holds exactly these items."""
+    run = json.loads((folder / "run.json").read_text(encoding="utf-8"))
+    ran_on = _field(run, "gold.version")
+    if ran_on != version:
+        raise ValueError(
+            f"{folder.as_posix()} ran on gold set {ran_on}, not {version}: score it"
+            " with the items it ran on"
+        )
     text = (folder / "questions.jsonl").read_text(encoding="utf-8")
     saved = [json.loads(line) for line in text.splitlines()]
     ids = sorted(line["id"] for line in saved)
@@ -308,6 +316,7 @@ def score_run(folder: Path, items: Sequence[Item]) -> list[Summary]:
     _write_json(
         folder / "scores.json",
         {
+            "gold_version": version,
             "per_question": [asdict(score) for score in scores],
             "summary": [asdict(row) for row in summary],
         },
@@ -412,5 +421,5 @@ def main(argv: Sequence[str] | None = None) -> int:
         except (RunExists, ResumeMismatch) as err:
             print(err)
             return 1
-    print(_table(score_run(folder, items)))
+    print(_table(score_run(folder, items, gold_version(gold))))
     return 0

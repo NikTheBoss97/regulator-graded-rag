@@ -55,4 +55,4 @@ def test_a_bm25_run_on_the_real_index(
         [s for _, s in r["hits"]] == sorted((s for _, s in r["hits"]), reverse=True)
         for r in rows
     )
-    assert score_run(tmp_path / "r", items)[0].n == 3  # the row "all"
+    assert score_run(tmp_path / "r", items, "f" * 64)[0].n == 3  # the row "all"
