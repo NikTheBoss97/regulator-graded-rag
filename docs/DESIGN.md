@@ -14,8 +14,10 @@ The decisions behind it, with the options each one rejected, are in
 
 Status: approved by the owner on 2026-11-08, after approving each section between
 2026-11-05 and 2026-11-08. Phase 1 is built: the repository and its checks, the corpus
-fetch and the passage builder. Phase 2 has drawn the dev and held-out split, and has
-built BM25 in SQL and the evaluation harness.
+fetch and the passage builder. Phase 2 is complete: the dev and held-out split, BM25 in
+SQL and the evaluation harness, a dev gold set of 250 questions, the held-out items
+frozen by checksum, and BM25's first dev run with the sample-size table
+([ADR-0020](adr/0020-sample-size-as-a-sensitivity-table.md)).
 
 ## Goals
 
@@ -340,8 +342,11 @@ unanswerable ones.
   about ±11 points.
 - On about 120 paired dev questions, a 10-point difference between two setups is
   detected roughly 60% of the time, assuming one question in five changes outcome
-  between them. Smaller differences may not be detectable. Phase 2 measures that share
-  on dev and redoes the calculation.
+  between them. Smaller differences may not be detectable. Phase 2 redid the
+  calculation on BM25's dev run: on 214 answerable questions, a paired comparison
+  detects a recall@10 difference of about 6 to 11 points with 80% power, depending on
+  how strongly two setups' scores correlate
+  ([ADR-0020](adr/0020-sample-size-as-a-sensitivity-table.md)).
 
 ### What is measured
 
@@ -493,8 +498,6 @@ generation lands with its experiment record, in any phase.
 
 Each is made when its phase starts, with options and an ADR:
 
-- **Phase 2:** the review tool for the owner's check, and the sample-size calculation,
-  redone on dev.
 - **Phase 3:** the embedding and reranking models, the fusion method and the reranking
   depth, all settled by experiment.
 - **Phase 4:** the generator model and its server, the number of passages in the
@@ -508,7 +511,7 @@ Each is made when its phase starts, with options and an ADR:
 
 | Risk | Checked in | If it fails |
 |---|---|---|
-| Too few questions to tell setups apart: the sample predicts about 200, with about 120 answerable in dev | Phase 2, right after the split | Every comparison shows its interval, and "no difference" reads as "too small to see". A large shortfall brings the 2017 cut-off back to the owner |
+| Too few questions to tell setups apart: the sample predicts about 200, with about 120 answerable in dev | Checked on 2026-11-24: 214 answerable in dev, so no shortfall ([ADR-0020](adr/0020-sample-size-as-a-sensitivity-table.md)) | Every comparison shows its interval, and "no difference" reads as "too small to see". A large shortfall brings the 2017 cut-off back to the owner |
 | The local model cannot copy quotes word for word, or is too slow. A schema fixes the JSON's shape, not the wording of a quote | Phase 4, by the oracle run | An unverified quote is already a decline, so the cost shows as a measured decline rate, never as a false citation. Next comes a larger model through Colibri, whose README gives about 11 tokens a second on 8 GB cards, roughly 4 hours per dev run; or Haiku as the default, about $0.07 per dev run, which reopens ADR-0011 with the owner |
 | Sources refuse scripts: PHMSA returns 403, the Internet Archive returned 503 during design, and eCFR needed a specific request header | Phases 1 and 2 | Each file is fetched once, with retries and backoff, and kept with its checksum. All work runs from the saved copies. The archive is read one request every 3 seconds, waiting 10, 60 and then 300 seconds after a refusal |
 | The owner's checking time is on the critical path: the held-out file must be frozen before phase 3, and only the owner checks it | Phase 2 | The harness and BM25 are built meanwhile. At one to two minutes per question, checking takes roughly 4–8 hours, plus 1–2 hours to write the unanswerable questions; up to two working days if the letters take longer. Code's checks and an audit ([ADR-0022](adr/0022-code-checks-and-an-audit-for-gold-items.md)) cut the owner's share to the drafts code cannot clear plus 40 per split |
@@ -537,3 +540,4 @@ Each is made when its phase starts, with options and an ADR:
 - [ADR-0016: Commits use GitHub's no-reply email](adr/0016-commits-use-github-no-reply-email.md)
 - [ADR-0017: Passage text from the XML](adr/0017-passage-text-from-the-xml.md)
 - [ADR-0018: Near-duplicate letters and the split draw](adr/0018-near-duplicate-letters-and-the-split-draw.md)
+- [ADR-0020: The sample size as a sensitivity table](adr/0020-sample-size-as-a-sensitivity-table.md)
