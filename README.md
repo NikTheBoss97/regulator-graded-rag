@@ -41,7 +41,11 @@ compliance or legal advice.
 ## Results
 
 <!-- results:start -->
-No committed run yet: BM25's first dev run comes with the approved dev questions.
+**Dev, corpus ecaac596…, gold set 7bfdfdf9…, 214 answerable questions**
+
+| Run | Retriever | Settings | Recall@10 | Recall@5 | Recall@20 | Recall@50 | MRR | nDCG@10 | Median seconds |
+|---|---|---|---:|---:|---:|---:|---:|---:|---:|
+| [2026-11-24-bm25-dev-1](eval/runs/2026-11-24-bm25-dev-1/) | bm25 | b=0.75, config=english, k1=1.2, variant=lucene | 0.691 | 0.610 | 0.761 | 0.856 | 0.575 | 0.558 | 0.050 |
 <!-- results:end -->
 
 `uv run python -m regulator_graded_rag.report` writes this table from the committed run
