@@ -83,6 +83,19 @@ One command builds the README's results table from the run records.
 - Recording how many configurations were tried guards against finding a difference only
   because many were tested.
 
+## Amendments
+
+- 2026-11-24: A run file also names its commit's tree, the hash of the commit's files.
+  `main` takes only rebase merges (ADR-0013), which give each commit a new ID but keep
+  its tree while `main` has not moved, so the tree finds a run's code on `main` from any
+  clone (`git log --format='%H %T'` lists each commit's tree), and the commit itself
+  stays reachable through its pull request (`git fetch origin pull/<n>/head`). The merge
+  check confirms that each rebased commit on `main` has the same tree as the one it
+  replaces. A branch is not rewritten after its run; if it must be, the run is redone. A
+  change to a dev gold file fails the test that rescores committed dev runs for every
+  run made on the older version, so the pull request that makes it reruns those runs or
+  keeps a copy of the old file.
+
 ## References
 
 - Kalervo Järvelin and Jaana Kekäläinen, [Cumulated Gain-Based Evaluation of IR Techniques](https://doi.org/10.1145/582415.582418) (ACM Transactions on Information Systems, 2002).

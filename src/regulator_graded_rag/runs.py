@@ -6,10 +6,10 @@ Usage: python -m regulator_graded_rag.run --split {dev,heldout} [--gold PATH] [-
 with DATABASE_URL set as in .env.example.
 
 A run is one folder, eval/runs/<YYYY-MM-DD>-<retriever>-<split>-<n>/:
-- run.json, the run file: the commit and whether tracked files had uncommitted changes,
-  the corpus version, the gold set's path, version and counts, the split, the retriever
-  and its settings, the machine, the cost and the running total, and for a held-out run
-  how many held-out runs there have been;
+- run.json, the run file: the commit, its tree and whether tracked files had uncommitted
+  changes, the corpus version, the gold set's path, version and counts, the split, the
+  retriever and its settings, the machine, the cost and the running total, and for a
+  held-out run how many held-out runs there have been;
 - questions.jsonl, one line per question, written as it finishes: its ID and type, its
   top 50 passage IDs with their scores, and its time, never its text;
 - scores.json, recomputed from the stored hits, naming the gold set's version.
@@ -96,8 +96,9 @@ def frozen_matches(items: Path, frozen: Path) -> bool:
     return bool(words) and words[0] == gold_version(items)
 
 
-def git_state(repo: Path) -> tuple[str, bool]:
-    """The commit checked out, and whether tracked files have uncommitted changes."""
+def git_state(repo: Path) -> tuple[str, str, bool]:
+    """The commit checked out, its tree, and whether tracked files have uncommitted
+    changes. A rebase merge gives the commit a new ID but keeps its tree (ADR-0012)."""
 
     def git(*args: str) -> str:
         return subprocess.run(
@@ -105,7 +106,8 @@ def git_state(repo: Path) -> tuple[str, bool]:
         ).stdout
 
     dirty = git("status", "--porcelain", "--untracked-files=no").strip()
-    return git("rev-parse", "HEAD").strip(), bool(dirty)
+    commit, tree = git("rev-parse", "HEAD", "HEAD^{tree}").split()
+    return commit, tree, bool(dirty)
 
 
 def machine() -> dict[str, str]:
@@ -158,7 +160,7 @@ def header(
     repo: Path,
 ) -> dict[str, object]:
     """The run file's fields that are known before the run starts."""
-    commit, dirty = git_state(repo)
+    commit, tree, dirty = git_state(repo)
     earlier = run_files(root)
     heldout_runs = sum(run.get("split") == "heldout" for run in earlier)
     return {
@@ -173,7 +175,7 @@ def header(
             "answerable": sum(item.answerable for item in items),
         },
         "corpus_version": corpus_version,
-        "git": {"commit": commit, "dirty": dirty},
+        "git": {"commit": commit, "tree": tree, "dirty": dirty},
         "machine": machine(),
         "started": _now(),
         "cost_usd": 0.0,
