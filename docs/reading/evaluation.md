@@ -23,6 +23,7 @@ tracing failures to a stage. Part of the [reading list](README.md).
 - Benjamin A. Carterette, [Multiple Testing in Statistical Analysis of Systems-Based Information Retrieval Experiments](https://doi.org/10.1145/2094072.2094076) (ACM Transactions on Information Systems, 2012). Modelling the many hypotheses tested on one data set can raise p-values by orders of magnitude. Why the number of configurations tried is recorded.
 - Mark D. Smucker, James Allan and Ben Carterette, [A Comparison of Statistical Significance Tests for Information Retrieval Evaluation](https://doi.org/10.1145/1321440.1321528) (CIKM, 2007). The t-test, bootstrap and randomization tests largely agree, and the authors recommend dropping the Wilcoxon and sign tests.
 - Kalervo Järvelin and Jaana Kekäläinen, [Cumulated Gain-Based Evaluation of IR Techniques](https://doi.org/10.1145/582415.582418) (ACM Transactions on Information Systems, 2002). The origin of nDCG: graded relevance, discounted by rank.
+- William C. Guenther, [Sample Size Formulas for Normal Theory *T* Tests](https://doi.org/10.1080/00031305.1981.10479363) (The American Statistician 35(4), 243–244, 1981). Approximate minimum sample sizes for t tests from normal quantiles alone, usually equal to the exact ones. The older treatment of planning a t test, next to Sakai's topic set size design.
 
 ## The held-out split and contamination
 

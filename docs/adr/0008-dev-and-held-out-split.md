@@ -71,6 +71,10 @@ the held-out run happens.
 
 - 2026-11-15: The split was drawn by code before any letter was read (ADR-0018): 903
   letters with reference numbers from 2017 on, 543 dev and 360 held-out.
+- 2026-11-24: The dev power estimate is redone on BM25's dev run in
+  [ADR-0020](0020-sample-size-as-a-sensitivity-table.md): dev has 214 answerable
+  questions, and a paired comparison detects a recall@10 difference of about 6 to 11
+  points with 80% power, depending on how strongly two setups' scores correlate.
 
 ## References
 
