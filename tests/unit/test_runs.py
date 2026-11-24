@@ -64,12 +64,13 @@ ITEMS = [
     item("99-0001-Q2", "two", ("173.185(a)",)),
     item("99-0002-Q1", "three", ("175.10",)),
 ]
+VERSION = "g" * 64
 HEAD: dict[str, object] = {
     "stage": "retrieval",
     "retriever": "fake",
     "settings": {"k": 1.0},
     "split": "dev",
-    "gold": {"version": "g" * 64},
+    "gold": {"version": VERSION},
     "corpus_version": "c" * 64,
     "git": {"commit": "a" * 40, "dirty": False},
     "machine": {"platform": "Windows-11", "python": "3.14.7", "processor": "x86"},
@@ -125,14 +126,14 @@ def test_every_item_is_searched_and_only_answerable_ones_are_scored(
     fake = Fake()
     run_retrieval(fake, [*ITEMS, unanswerable], tmp_path / "r", HEAD)
     assert fake.calls == ["one", "two", "three", "four"]
-    assert score_run(tmp_path / "r", [*ITEMS, unanswerable])[0].n == 3
+    assert score_run(tmp_path / "r", [*ITEMS, unanswerable], VERSION)[0].n == 3
 
 
 def test_an_empty_ranking_scores_zero(tmp_path: Path) -> None:
     # A question with no indexed word finds nothing, and still counts, at 0.
     run_retrieval(Fake(empty_on="two"), ITEMS, tmp_path / "r", HEAD)
     assert lines(tmp_path / "r")[1]["hits"] == []
-    overall = score_run(tmp_path / "r", ITEMS)[0]
+    overall = score_run(tmp_path / "r", ITEMS, VERSION)[0]
     assert (overall.n, overall.recall[10], overall.mrr) == (3, 1 / 3, 1 / 3)
 
 
@@ -207,9 +208,9 @@ def test_progress_counts_the_questions_searched(tmp_path: Path) -> None:
 
 def test_scores_are_recomputed_from_the_stored_hits(tmp_path: Path) -> None:
     run_retrieval(Fake(), ITEMS, tmp_path / "r", HEAD)
-    first = score_run(tmp_path / "r", ITEMS)
+    first = score_run(tmp_path / "r", ITEMS, VERSION)
     data = (tmp_path / "r" / "scores.json").read_bytes()
-    assert score_run(tmp_path / "r", ITEMS) == first
+    assert score_run(tmp_path / "r", ITEMS, VERSION) == first
     assert (tmp_path / "r" / "scores.json").read_bytes() == data
     assert [(s.type, s.n, s.recall[10]) for s in first] == [
         ("all", 3, 2 / 3),
@@ -220,7 +221,22 @@ def test_scores_are_recomputed_from_the_stored_hits(tmp_path: Path) -> None:
 def test_scoring_refuses_a_run_of_other_items(tmp_path: Path) -> None:
     run_retrieval(Fake(), ITEMS[:2], tmp_path / "r", HEAD)
     with pytest.raises(ValueError, match="differ"):
-        score_run(tmp_path / "r", ITEMS)
+        score_run(tmp_path / "r", ITEMS, VERSION)
+
+
+def test_scores_name_their_gold_version(tmp_path: Path) -> None:
+    run_retrieval(Fake(), ITEMS, tmp_path / "r", HEAD)
+    score_run(tmp_path / "r", ITEMS, VERSION)
+    scores = json.loads((tmp_path / "r" / "scores.json").read_text(encoding="utf-8"))
+    assert scores["gold_version"] == VERSION
+
+
+def test_scoring_refuses_another_gold_version(tmp_path: Path) -> None:
+    # Scores name the gold set they were computed against, so it must be the run's.
+    run_retrieval(Fake(), ITEMS, tmp_path / "r", HEAD)
+    with pytest.raises(ValueError, match="gold set"):
+        score_run(tmp_path / "r", ITEMS, "h" * 64)
+    assert not (tmp_path / "r" / "scores.json").exists()
 
 
 def test_the_header_counts_spending_and_held_out_runs(tmp_path: Path) -> None:
