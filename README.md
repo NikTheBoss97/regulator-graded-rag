@@ -57,10 +57,10 @@ records in `eval/runs/`, and a test fails if it is ever edited by hand.
 
 ## How it is evaluated
 
-- **Questions** are numbered yes-or-no questions from the regulator's letters from 2017
-  on, kept only when every paragraph they cite reads the same in the 2025 edition.
-  Code splits them into dev and held-out before anyone reads the letters, and the
-  held-out split runs once.
+- **Questions** are yes-or-no questions from the regulator's letters from 2017 on,
+  numbered or a letter's only one, kept only when every paragraph they cite reads the
+  same in the 2025 edition. Code splits them into dev and held-out before anyone reads
+  the letters, and the held-out split runs once.
 - **Retrieval** is scored by section recall@10: the share of the sections the regulator
   cited that reach the top 10 passages.
 - **Generation** is scored by the supported verdict: the regulator's yes or no, backed by
