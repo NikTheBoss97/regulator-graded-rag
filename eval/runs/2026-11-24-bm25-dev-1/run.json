@@ -1,0 +1,40 @@
+{
+  "corpus_version": "ecaac596422344e6b548dcd8a1816261a27d398d0d707077def27a5976db34ef",
+  "cost_usd": 0.0,
+  "finished": "2026-11-24T13:25:24+00:00",
+  "git": {
+    "commit": "5cf37c3eb5950a70833512c088ed941d4c02e7af",
+    "dirty": false,
+    "tree": "68e22c969a9c5182ce81b118ccc9902498e28541"
+  },
+  "gold": {
+    "answerable": 214,
+    "items": 250,
+    "path": "eval/dev/items.jsonl",
+    "version": "7bfdfdf9990f31769dda403ece213e9ccfeafd56a3dae434e12eb54d86bad3bb"
+  },
+  "heldout_runs": 0,
+  "machine": {
+    "platform": "Windows-11-10.0.26300-SP0",
+    "processor": "Intel64 Family 6 Model 183 Stepping 1, GenuineIntel",
+    "python": "3.14.7"
+  },
+  "questions": 250,
+  "retriever": "bm25",
+  "seconds": {
+    "median": 0.05031115000019781,
+    "p95": 0.11194020499842736,
+    "total": 13.691117199963628
+  },
+  "settings": {
+    "b": 0.75,
+    "config": "english",
+    "k1": 1.2,
+    "variant": "lucene"
+  },
+  "spent_usd": 0.0,
+  "split": "dev",
+  "stage": "retrieval",
+  "started": "2026-11-24T13:25:11+00:00",
+  "status": "complete"
+}
