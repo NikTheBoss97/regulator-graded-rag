@@ -9,6 +9,7 @@ from regulator_graded_rag.gold import gold_version, load_items
 from regulator_graded_rag.runs import score_run
 
 REPO = Path(__file__).resolve().parents[2]
+HELDOUT = REPO / "eval" / "heldout"
 
 
 def _dev_runs() -> list[Path]:
@@ -22,6 +23,11 @@ def _dev_runs() -> list[Path]:
     return folders
 
 
+def test_the_committed_dev_runs_are_found() -> None:
+    # The rescoring test below is skipped when it finds no run, so this one fails.
+    assert _dev_runs()
+
+
 @pytest.mark.parametrize("folder", _dev_runs(), ids=lambda folder: folder.name)
 def test_every_committed_dev_run_rescores_to_its_scores(
     folder: Path, tmp_path: Path
@@ -29,6 +35,9 @@ def test_every_committed_dev_run_rescores_to_its_scores(
     # A published number must come back from the stored hits and the gold file.
     run = json.loads((folder / "run.json").read_text(encoding="utf-8"))
     gold = REPO / run["gold"]["path"]
+    # Checked before any gold file is opened: a dev run never names held-out items.
+    held_out = gold.resolve().is_relative_to(HELDOUT.resolve())
+    assert not held_out, f"{folder.name} names a held-out gold file"
     version = run["gold"]["version"]
     assert gold_version(gold) == version, f"{gold.name} changed since {folder.name}"
     for name in ("run.json", "questions.jsonl"):
