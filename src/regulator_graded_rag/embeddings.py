@@ -169,7 +169,7 @@ def load_vectors(
     if header["corpus_version"] != corpus_version:
         raise ValueError(
             f"{path.name} holds vectors of corpus version {header['corpus_version']},"
-            f" not {corpus_version}: compute them again"
+            f" not {corpus_version}: delete {path.as_posix()} and embed again"
         )
     if (header["model"], header["revision"]) != (model, revision):
         raise ValueError(
