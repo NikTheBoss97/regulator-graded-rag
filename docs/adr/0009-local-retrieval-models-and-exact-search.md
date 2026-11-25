@@ -100,6 +100,19 @@ candidates:
 | BAAI/bge-reranker-v2-m3 | 953dc6f6f85a1b2dbfca4c34a2796e7dde08d41e | d9e3e081faff1eefb84019509b2f5558fd74c1a05a2c7db22f74174fcedb5286 | 2,271,071,852 |
 | Qwen/Qwen3-Reranker-0.6B | e61197ed45024b0ed8a2d74b80b4d909f1255473 | 27cd75a405b9c1b46b59abfd88aaa209e6fed2a1972cde9b70e7659537c5e65b | 1,191,588,280 |
 
+- 2026-11-25: A model's precision is a setting of its dense stage (the owner's choice).
+  Transformers otherwise picks it from the model's files: bge-base loaded in float32,
+  but Qwen3-Embedding and gte-modernbert ship 16-bit weights, so they would have run in
+  16 bits, a second change that no record showed.
+  - A dense config may state `dtype` as float32, float16 or bfloat16. A config that
+    states none runs in float32, as E1 did, so E1's committed config, which is never
+    edited, still reads as it ran.
+  - The dtype joins the cache key, the vectors file's header and the meta table. A
+    dense stage refuses vectors made with another dtype or max_length, and vectors
+    loaded before these were recorded.
+  - The run record names, besides the vectors' SHA-256, their dtype, the count of
+    passages cut to the input length, the GPU, and torch's and CUDA's versions.
+
 ## References
 
 - Hugging Face model cards: [bge-base-en-v1.5](https://huggingface.co/BAAI/bge-base-en-v1.5), [gte-modernbert-base](https://huggingface.co/Alibaba-NLP/gte-modernbert-base), [Qwen3-Embedding-0.6B](https://huggingface.co/Qwen/Qwen3-Embedding-0.6B), [ms-marco-MiniLM-L6-v2](https://huggingface.co/cross-encoder/ms-marco-MiniLM-L6-v2), [bge-reranker-v2-m3](https://huggingface.co/BAAI/bge-reranker-v2-m3) and [Qwen3-Reranker-0.6B](https://huggingface.co/Qwen/Qwen3-Reranker-0.6B).
