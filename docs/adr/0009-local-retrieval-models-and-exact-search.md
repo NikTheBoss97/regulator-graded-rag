@@ -71,6 +71,35 @@ candidates:
 - Unverified: how well any of these models retrieves on this project's questions, and
   how fast they run on a CPU.
 
+## Amendments
+
+- 2026-11-25: The versions and pins phase 3 runs with.
+  - The models run from a `models` dependency group that CI never installs: torch
+    2.14.1 (PyTorch's CUDA 12.6 build on Windows, PyPI's elsewhere), sentence-transformers
+    6.3.0 and transformers 5.23.0, the newest 5.x release past the 7-day cooldown. The
+    group's other new dependencies were locked under the same cooldown, and no module
+    imports these packages when it loads.
+  - Each model is pinned by its revision and by its `model.safetensors` SHA-256, both read
+    from the Hugging Face API at that revision, in the table below. The loader checks the
+    file's SHA-256 before loading it, and never loads a pickle file or code from the
+    model's repository; three of the six repositories also hold a `pytorch_model.bin`.
+  - The query formats, verified in each model's files at its revision: bge-base-en-v1.5
+    puts `Represent this sentence for searching relevant passages: ` before a question,
+    Qwen3-Embedding-0.6B puts `Instruct: Given a web search query, retrieve relevant
+    passages that answer the query`, a newline and `Query:`, and gte-modernbert-base puts
+    nothing. Passages never get a prefix.
+  - bge-reranker-v2-m3's weights take 2.27 GB, more than the 0.1-1.2 GB estimated above;
+    the others take 0.09-1.19 GB.
+
+| Model | Revision | `model.safetensors` SHA-256 | Bytes |
+|---|---|---|---|
+| BAAI/bge-base-en-v1.5 | a5beb1e3e68b9ab74eb54cfd186867f64f240e1a | c7c1988aae201f80cf91a5dbbd5866409503b89dcaba877ca6dba7dd0a5167d7 | 437,955,512 |
+| Alibaba-NLP/gte-modernbert-base | e7f32e3c00f91d699e8c43b53106206bcc72bb22 | 3e85899d5728cb7de79781c0c3acfb91ccef9f875f1f7e0b3c9f3dd4b6a724ba | 298,041,568 |
+| Qwen/Qwen3-Embedding-0.6B | 97b0c614be4d77ee51c0cef4e5f07c00f9eb65b3 | 0437e45c94563b09e13cb7a64478fc406947a93cb34a7e05870fc8dcd48e23fd | 1,191,586,416 |
+| cross-encoder/ms-marco-MiniLM-L6-v2 | 233902d25c440f23af6f7d6e94d2946bac0bee0a | 821d1aa69520101d6e0737f78a042ae25b19e5cb9160701909d10434f4aeb0ae | 90,870,598 |
+| BAAI/bge-reranker-v2-m3 | 953dc6f6f85a1b2dbfca4c34a2796e7dde08d41e | d9e3e081faff1eefb84019509b2f5558fd74c1a05a2c7db22f74174fcedb5286 | 2,271,071,852 |
+| Qwen/Qwen3-Reranker-0.6B | e61197ed45024b0ed8a2d74b80b4d909f1255473 | 27cd75a405b9c1b46b59abfd88aaa209e6fed2a1972cde9b70e7659537c5e65b | 1,191,588,280 |
+
 ## References
 
 - Hugging Face model cards: [bge-base-en-v1.5](https://huggingface.co/BAAI/bge-base-en-v1.5), [gte-modernbert-base](https://huggingface.co/Alibaba-NLP/gte-modernbert-base), [Qwen3-Embedding-0.6B](https://huggingface.co/Qwen/Qwen3-Embedding-0.6B), [ms-marco-MiniLM-L6-v2](https://huggingface.co/cross-encoder/ms-marco-MiniLM-L6-v2), [bge-reranker-v2-m3](https://huggingface.co/BAAI/bge-reranker-v2-m3) and [Qwen3-Reranker-0.6B](https://huggingface.co/Qwen/Qwen3-Reranker-0.6B).
