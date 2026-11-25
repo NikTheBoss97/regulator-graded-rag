@@ -82,6 +82,18 @@ n = 214 and s = 0.414:
   from normal quantiles alone. Neither full text could be read, so which of them states
   the z₀.₉₇₅²/2 term was not checked; the exact power above stands in for it.
 
+## Amendments
+
+- 2026-11-25: The measured spread. Phase 3's first dense run, bge-base-en-v1.5 against
+  BM25 on the 214 answerable dev questions, gives per-question differences in section
+  recall@10 with a standard deviation of 0.388
+  (`eval/comparisons/2026-11-24-bm25-dev-1--2026-11-25-dense-bge-base-dev-1.json`). The
+  formula above then gives an MDD of 0.075, between the assumed ρ = 0.5 and ρ = 0.7 rows,
+  and this measured row replaces them for retrievers compared with BM25: dev detects a
+  difference of about 7.5 points of recall@10. A setup much closer to BM25, or further
+  from it, has a smaller or larger spread, so each comparison record gives its own
+  spread and MDD, and verdicts rest on the randomization test (ADR-0024).
+
 ## References
 
 - Tetsuya Sakai, [Topic Set Size Design](https://doi.org/10.1007/s10791-015-9273-z)
