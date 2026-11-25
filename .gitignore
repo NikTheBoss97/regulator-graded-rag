@@ -36,5 +36,8 @@ eval/heldout/
 eval/letters/
 eval/ecfr/
 
+# Pipeline stage outputs, recomputed on demand and keyed by the code that made them
+.cache/
+
 # Personal study list of academic sources, kept local
 docs/THEORY.md
