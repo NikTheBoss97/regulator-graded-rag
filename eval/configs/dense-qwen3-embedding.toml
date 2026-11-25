@@ -1,0 +1,15 @@
+# Author: Nicola Antonello
+# E3: dense retrieval with Qwen3-Embedding-0.6B against the BM25 baseline (ADR-0009). The
+# query prompt is the model's stored "query" prompt at this revision, verified on
+# 2026-11-25; passages get none. It runs in float32, as E1 did, so the model is the one
+# change. A config that produced a committed run is never edited (ADR-0023).
+name = "dense-qwen3-embedding"
+
+[[first_stage]]
+kind = "dense"
+model = "Qwen/Qwen3-Embedding-0.6B"
+revision = "97b0c614be4d77ee51c0cef4e5f07c00f9eb65b3"
+weights_sha256 = "0437e45c94563b09e13cb7a64478fc406947a93cb34a7e05870fc8dcd48e23fd"
+query_prompt = "Instruct: Given a web search query, retrieve relevant passages that answer the query\nQuery:"
+max_length = 8192
+dtype = "float32"

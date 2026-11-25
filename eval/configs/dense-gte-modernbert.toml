@@ -1,0 +1,15 @@
+# Author: Nicola Antonello
+# E2: dense retrieval with gte-modernbert-base against the BM25 baseline (ADR-0009). The
+# model card gives no query prompt, so neither questions nor passages get one. It runs in
+# float32, as E1 did, so the model is the one change. A config that produced a committed
+# run is never edited (ADR-0023).
+name = "dense-gte-modernbert"
+
+[[first_stage]]
+kind = "dense"
+model = "Alibaba-NLP/gte-modernbert-base"
+revision = "e7f32e3c00f91d699e8c43b53106206bcc72bb22"
+weights_sha256 = "3e85899d5728cb7de79781c0c3acfb91ccef9f875f1f7e0b3c9f3dd4b6a724ba"
+query_prompt = ""
+max_length = 8192
+dtype = "float32"
