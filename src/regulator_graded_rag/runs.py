@@ -1,17 +1,25 @@
 # Author: Nicola Antonello
 """Retrieval runs over a gold split, kept as run records (ADR-0012, ADR-0014).
 
-Usage: python -m regulator_graded_rag.run --split {dev,heldout} [--gold PATH] [--k1 F]
-[--b F] [--resume NAME] [--runs DIR] [--heldout-by-owner], from the repository root,
-with DATABASE_URL set as in .env.example.
+Usage: python -m regulator_graded_rag.run --split {dev,heldout} [--config PATH]
+[--gold PATH] [--k1 F] [--b F] [--resume NAME] [--runs DIR] [--heldout-by-owner], from
+the repository root, with DATABASE_URL set as in .env.example.
+
+--config runs an experiment config through the pipeline, which caches stage outputs in
+.cache/pipeline/<split>, and the run is named after the config. Without it the command
+runs BM25 with k1 and b, which a config sets itself. A config's name stays bound to the
+contents of its first run, so a config changed since a run under its name is refused
+(ADR-0023).
 
 A run is one folder, eval/runs/<YYYY-MM-DD>-<retriever>-<split>-<n>/:
 - run.json, the run file: the commit, its tree and whether tracked files had uncommitted
   changes, the corpus version, the gold set's path, version and counts, the split, the
-  retriever and its settings, the machine, the cost and the running total, and for a
-  held-out run how many held-out runs there have been;
+  retriever and its settings, the config's path, SHA-256 and text when there is one,
+  the machine, the cost and the running total, and for a held-out run how many held-out
+  runs there have been;
 - questions.jsonl, one line per question, written as it finishes: its ID and type, its
-  top 50 passage IDs with their scores, and its time, never its text;
+  top 50 passage IDs with their scores, and its time, never its text. A config run's
+  time is what its stages took to compute the answer, even when the cache gave it;
 - scores.json, recomputed from the stored hits, naming the gold set's version.
 Every item is searched, unanswerable ones included, and only answerable items are
 scored. A run stopped midway, by closing the laptop, resumes with the settings it started
@@ -29,12 +37,14 @@ import statistics
 import subprocess
 import time
 from collections.abc import Callable, Iterable, Sequence
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from datetime import UTC, date, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol, runtime_checkable
 
 from regulator_graded_rag.bm25 import BM25, K1, B, Retriever, StaleIndex
+from regulator_graded_rag.cache import CACHE_ROOT, StageCache
+from regulator_graded_rag.configs import Config, ConfigError, load_config
 from regulator_graded_rag.db import connect, database_url
 from regulator_graded_rag.gold import Item, gold_version, load_items
 from regulator_graded_rag.manifest import DEFAULT_MANIFEST, load_manifest
@@ -45,6 +55,7 @@ from regulator_graded_rag.metrics import (
     score_question,
     summarize,
 )
+from regulator_graded_rag.pipeline import build
 
 RUNS = Path("eval/runs")
 GOLD = {
@@ -66,6 +77,20 @@ _SAME = (
     "git.dirty",
     "machine",
 )
+
+
+@runtime_checkable
+class Timed(Protocol):
+    """A retriever whose answers may come from a cache, in microseconds, reports the
+    seconds its stages took to compute the last one, and the run records those."""
+
+    def compute_seconds(self) -> float: ...
+
+
+def cache_root(split: str) -> Path:
+    """Each split's own stage cache, so held-out hit lists stay apart from dev's, under
+    a heldout/ path."""
+    return CACHE_ROOT / split
 
 
 class RunExists(Exception):
@@ -150,6 +175,23 @@ def run_files(root: Path) -> list[dict[str, Any]]:
     ]
 
 
+def run_config(path: Path, root: Path, repo: Path) -> Config:
+    """The config in the file, with its path as a committed record may show it; refused
+    with ConfigError when a run under root ran a config of the same name with other
+    contents, since a config that produced a run is never edited (ADR-0023)."""
+    config = replace(load_config(path), path=_recorded(path, repo))
+    for run_file in sorted(root.glob("*/run.json")):
+        run = json.loads(run_file.read_text(encoding="utf-8"))
+        ran = _field(run, "config.sha256")
+        if run.get("retriever") == config.name and ran not in (None, config.sha256):
+            raise ConfigError(
+                f"{run_file.parent.as_posix()} ran {config.name} from a config with"
+                f" SHA-256 {ran}, and {config.path} now has {config.sha256}: a changed"
+                " config needs a new name"
+            )
+    return config
+
+
 def header(
     retriever: Retriever,
     items_path: Path,
@@ -158,12 +200,15 @@ def header(
     corpus_version: str,
     root: Path,
     repo: Path,
+    *,
+    config: Config | None = None,
 ) -> dict[str, object]:
-    """The run file's fields that are known before the run starts."""
+    """The run file's fields that are known before the run starts, with the whole config
+    when the retriever runs one."""
     commit, tree, dirty = git_state(repo)
     earlier = run_files(root)
     heldout_runs = sum(run.get("split") == "heldout" for run in earlier)
-    return {
+    head: dict[str, object] = {
         "stage": "retrieval",
         "retriever": retriever.name,
         "settings": retriever.settings(),
@@ -189,6 +234,13 @@ def header(
         ),
         "heldout_runs": heldout_runs + 1 if split == "heldout" else 0,
     }
+    if config is not None:
+        head["config"] = {
+            "path": config.path,
+            "sha256": config.sha256,
+            "text": config.text,
+        }
+    return head
 
 
 def _field(run: dict[str, Any], key: str) -> Any:
@@ -268,6 +320,8 @@ def run_retrieval(
             start = clock()
             hits = retriever.search(item.question, DEPTH)
             took = clock() - start
+            if isinstance(retriever, Timed):
+                took = retriever.compute_seconds()
             line = {
                 "id": item.id,
                 "type": item.type,
@@ -340,14 +394,18 @@ def _table(rows: Sequence[Summary]) -> str:
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="python -m regulator_graded_rag.run",
-        description="Run BM25 over a gold split into a run record, then score it.",
+        description="Run BM25, or an experiment config, over a gold split into a run"
+        " record, then score it.",
     )
     parser.add_argument("--split", required=True, choices=sorted(GOLD))
     parser.add_argument(
+        "--config", type=Path, help="run this experiment config (ADR-0023)"
+    )
+    parser.add_argument(
         "--gold", type=Path, help="the gold items (default: the split's)"
     )
-    parser.add_argument("--k1", type=float, default=K1)
-    parser.add_argument("--b", type=float, default=B)
+    parser.add_argument("--k1", type=float, help=f"without a config (default {K1})")
+    parser.add_argument("--b", type=float, help=f"without a config (default {B})")
     parser.add_argument("--resume", metavar="NAME", help="resume the stopped run NAME")
     parser.add_argument("--runs", type=Path, default=RUNS)
     parser.add_argument(
@@ -359,6 +417,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.split == "heldout" and not args.heldout_by_owner:
         print("held-out runs are started by the owner only (ADR-0014)")
         return 2
+    given = (("--k1", args.k1), ("--b", args.b))
+    flags = [flag for flag, value in given if value is not None]
+    if args.config is not None and flags:
+        print(
+            f"--config sets every setting itself, so {' and '.join(flags)} cannot go"
+            " with it"
+        )
+        return 1
     gold: Path = args.gold or GOLD[args.split]
     try:
         items = load_items(gold)
@@ -389,6 +455,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.resume and not (runs / args.resume / "run.json").exists():
         print(f"there is no run {args.resume} in {runs.as_posix()} to resume")
         return 1
+    config = None
+    if args.config is not None:
+        try:
+            config = run_config(args.config, runs, Path("."))
+        except (OSError, ValueError) as err:
+            print(err)
+            return 1
     try:
         manifest = load_manifest(DEFAULT_MANIFEST)
         url = database_url()
@@ -397,9 +470,18 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 1
     corpus_version = str(manifest.version)
     with connect(url) as conn:
+        retriever: Retriever
         try:
-            retriever = BM25(conn, corpus_version=corpus_version, k1=args.k1, b=args.b)
-        except StaleIndex as err:
+            if config is None:
+                k1 = K1 if args.k1 is None else args.k1
+                b = B if args.b is None else args.b
+                retriever = BM25(conn, corpus_version=corpus_version, k1=k1, b=b)
+            else:
+                cache = StageCache(cache_root(args.split))
+                retriever = build(
+                    config, conn, corpus_version=corpus_version, cache=cache
+                )
+        except (StaleIndex, ConfigError) as err:
             print(err)
             return 1
         existing = [path.name for path in runs.iterdir()] if runs.is_dir() else []
@@ -408,7 +490,14 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
         folder = runs / name
         head = header(
-            retriever, gold, items, args.split, corpus_version, runs, Path(".")
+            retriever,
+            gold,
+            items,
+            args.split,
+            corpus_version,
+            runs,
+            Path("."),
+            config=config,
         )
         start = time.monotonic()
 

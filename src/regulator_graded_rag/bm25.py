@@ -104,6 +104,18 @@ class BM25:
         self._b = b
         self._config = config
         self._query = sql.SQL(_SEARCH).format(s=sql.Identifier(schema))
+        self._built = sql.SQL(
+            "SELECT extract(epoch FROM built)::text, version() FROM {s}.meta"
+        ).format(s=sql.Identifier(schema))
+
+    def identity(self) -> dict[str, str]:
+        """What a search reads besides its settings: when the index was built, in
+        seconds since 1970 whatever the session's time zone, and the server that computes
+        the scores, whose arithmetic could change in the last digits."""
+        row = self._conn.execute(self._built).fetchone()
+        assert row is not None, "an index always has its meta row"
+        built, server = row
+        return {"index_built": built, "server": server}
 
     def settings(self) -> dict[str, str | float]:
         return {

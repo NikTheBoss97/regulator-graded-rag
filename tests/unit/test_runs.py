@@ -8,18 +8,24 @@ from pathlib import Path
 import pytest
 
 from regulator_graded_rag.bm25 import Hit
+from regulator_graded_rag.cache import CACHE_ROOT
+from regulator_graded_rag.configs import load_config
 from regulator_graded_rag.gold import Item, gold_version
 from regulator_graded_rag.runs import (
     ResumeMismatch,
     RunExists,
+    cache_root,
     freeze,
     frozen_matches,
     header,
     main,
+    run_config,
     run_name,
     run_retrieval,
     score_run,
 )
+
+BASELINE = Path("eval/configs/bm25.toml")
 
 
 class Fake:
@@ -364,3 +370,97 @@ def test_frozen_items_must_match_their_checksum(tmp_path: Path) -> None:
     assert frozen.read_text(encoding="utf-8").split()[0] == gold_version(items)
     items.write_bytes(items.read_bytes().replace(b"U-1", b"U-2"))
     assert not frozen_matches(items, frozen)
+
+
+def test_a_config_changed_after_its_run_is_refused(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # A config that produced a run is never edited: a change gets a new name (ADR-0023).
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    gold = tmp_path / "items.jsonl"
+    gold.write_text(json.dumps(asdict(ITEMS[0])) + "\n", encoding="utf-8")
+    config = tmp_path / "bm25.toml"
+    config.write_bytes(BASELINE.read_bytes())
+    runs = tmp_path / "runs"
+    (runs / "2026-11-25-bm25-dev-1").mkdir(parents=True)
+    # Another config's run, with its own contents, never stops this one.
+    (runs / "2026-11-25-other-dev-1").mkdir()
+    other = {"retriever": "other", "status": "complete", "config": {"sha256": "1" * 64}}
+    other_file = runs / "2026-11-25-other-dev-1" / "run.json"
+    other_file.write_text(json.dumps(other), encoding="utf-8")
+    argv = ["--split", "dev", "--gold", str(gold), "--runs", str(runs)]
+
+    def ran(sha256: str) -> str:
+        run = {"retriever": "bm25", "status": "complete", "config": {"sha256": sha256}}
+        run_file = runs / "2026-11-25-bm25-dev-1" / "run.json"
+        run_file.write_text(json.dumps(run), encoding="utf-8")
+        assert main([*argv, "--config", str(config)]) == 1
+        return capsys.readouterr().out
+
+    # The same config again is no change: without a database it stops there instead.
+    unchanged = ran(load_config(config).sha256)
+    assert "DATABASE_URL" in unchanged and "new name" not in unchanged
+    changed = ran("0" * 64)
+    assert "2026-11-25-bm25-dev-1" in changed and "needs a new name" in changed
+
+
+def test_the_config_path_is_recorded_without_the_home_folder(tmp_path: Path) -> None:
+    # Run records are committed, and an absolute path names the user's home folder.
+    repo = tmp_path / "repo"
+    inside = repo / "eval" / "configs" / "bm25.toml"
+    inside.parent.mkdir(parents=True)
+    inside.write_bytes(BASELINE.read_bytes())
+    outside = tmp_path / "bm25.toml"
+    outside.write_bytes(BASELINE.read_bytes())
+    paths = [
+        run_config(path, tmp_path / "runs", repo).path for path in (inside, outside)
+    ]
+    assert paths == ["eval/configs/bm25.toml", "bm25.toml"]
+
+
+def test_the_header_holds_the_whole_config(tmp_path: Path) -> None:
+    config = load_config(BASELINE)
+    gold = tmp_path / "items.jsonl"
+    gold.write_text("", encoding="utf-8")
+    head = header(Fake(), gold, [], "dev", "c" * 64, tmp_path, Path("."), config=config)
+    assert head["config"] == {
+        "path": "eval/configs/bm25.toml",
+        "sha256": config.sha256,
+        "text": config.text,
+    }
+    assert "config" not in header(
+        Fake(), gold, [], "dev", "c" * 64, tmp_path, Path(".")
+    )
+
+
+def test_a_config_is_not_mixed_with_the_bm25_flags(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # The config sets k1 and b itself, so a flag beside it would be ignored unseen; 0
+    # is a value too.
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    for flag in ("--k1", "--b"):
+        assert main(["--split", "dev", "--config", str(BASELINE), flag, "0"]) == 1
+        assert f"so {flag} cannot go with it" in capsys.readouterr().out
+
+
+def test_a_retriever_that_reports_compute_seconds_is_timed_by_them(
+    tmp_path: Path,
+) -> None:
+    # An answer from the pipeline's cache takes microseconds, so the run records the
+    # seconds its stages took to compute it; any other retriever is timed by the clock.
+    class Cached(Fake):
+        def compute_seconds(self) -> float:
+            return 0.5
+
+    for name, retriever in (("cached", Cached()), ("timed", Fake())):
+        clock = iter([0.0, 1.0, 1.0, 3.0, 3.0, 6.0]).__next__
+        run_retrieval(retriever, ITEMS, tmp_path / name, HEAD, clock=clock)
+    assert [x["seconds"] for x in lines(tmp_path / "cached")] == [0.5, 0.5, 0.5]
+    assert [x["seconds"] for x in lines(tmp_path / "timed")] == [1.0, 2.0, 3.0]
+
+
+def test_each_split_keeps_its_own_stage_cache() -> None:
+    # Held-out hit lists stay apart from dev's, under a heldout/ path.
+    assert cache_root("dev") == CACHE_ROOT / "dev"
+    assert cache_root("heldout") == CACHE_ROOT / "heldout"

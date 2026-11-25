@@ -215,6 +215,19 @@ bigger one has to earn its place with a measured gain. The candidates:
   are computed once on the Windows laptop and saved with a checksum. Other machines load
   that file, and every run record names its machine.
 
+**Experiments are configs, run by one pipeline**
+([ADR-0023](adr/0023-experiments-as-configs-run-by-one-cached-pipeline.md)). Each
+configuration is a TOML file in `eval/configs/`: one or two first stages, a fusion when
+there are two, an optional reranker, and at most one grid, which cross-validation tunes
+([ADR-0024](adr/0024-paired-comparisons-cross-validated-tuning-and-adoption.md)). The
+pipeline turns a config into a retriever with BM25's interface, so the run command and
+phase 4 call it alike. It caches each stage's top 50 passages per question, with the
+seconds they took, under a key that names the code and the data the stage read, so an
+entry never outlives either, and a run answered from the cache still records what each
+answer cost. A config runs exactly as written or is refused, and a config that produced
+a run is never edited: the run command refuses a changed config under an old name, and
+`eval/configs/bm25.toml` reproduces the baseline run exactly.
+
 ### Generation
 
 **The default generator is a local open-weight model**, under Apache-2.0 or MIT from a
@@ -544,4 +557,5 @@ Each is made when its phase starts, with options and an ADR:
 - [ADR-0020: The sample size as a sensitivity table](adr/0020-sample-size-as-a-sensitivity-table.md)
 - [ADR-0021: Which letter questions become items](adr/0021-which-letter-questions-become-items.md)
 - [ADR-0022: Code checks and an audit for the gold items](adr/0022-code-checks-and-an-audit-for-gold-items.md)
+- [ADR-0023: Experiments as configs, run by one cached pipeline](adr/0023-experiments-as-configs-run-by-one-cached-pipeline.md)
 - [ADR-0024: Paired comparisons, cross-validated tuning and adoption](adr/0024-paired-comparisons-cross-validated-tuning-and-adoption.md)
