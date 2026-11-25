@@ -49,6 +49,28 @@ def write_run(
     (folder / "scores.json").write_text(json.dumps(scores), encoding="utf-8")
 
 
+def test_a_config_run_links_its_config_instead_of_its_checksums(
+    tmp_path: Path,
+) -> None:
+    # A config run's settings are its file's path and SHA-256s, which would fill the
+    # README's first screen; the committed file holds every setting.
+    config_run: dict[str, object] = {
+        "retriever": "dense-x",
+        "settings": {
+            "config_file": "eval/configs/dense-x.toml",
+            "config_sha256": "a" * 64,
+            "vectors_sha256": "b" * 64,
+        },
+        "config": {"path": "eval/configs/dense-x.toml", "sha256": "a" * 64},
+    }
+    write_run(tmp_path, "2026-11-25-dense-x-dev-1", config_run)
+    write_run(tmp_path, "2026-11-24-bm25-dev-1")
+    block = results(tmp_path)
+    assert "| [dense-x.toml](eval/configs/dense-x.toml) |" in block
+    assert "a" * 64 not in block and "b" * 64 not in block
+    assert "| k1=1.2, b=0.75 |" in block
+
+
 def test_runs_on_other_gold_sets_get_blocks_of_their_own(tmp_path: Path) -> None:
     # Results are compared only on the same corpus and gold set.
     write_run(tmp_path, "2026-11-20-bm25-dev-1")
