@@ -21,5 +21,4 @@ Every number comes from a committed run record in `eval/runs/` or comparison rec
 
 | # | Experiment | Baseline | Verdict | Configurations so far |
 |---|---|---|---|---|
-
-No experiment yet: the first is phase 3's dense retrieval against BM25.
+| [0001](0001-dense-bge-base-against-bm25.md) | Dense retrieval with bge-base-en-v1.5 | BM25, `2026-11-24-bm25-dev-1` | Rejected: section recall@10 −0.073 (95% interval −0.125 to −0.021), p = 0.0062 | 1 |

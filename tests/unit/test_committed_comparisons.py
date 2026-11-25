@@ -16,6 +16,11 @@ def _committed() -> list[Path]:
     return sorted(COMPARISONS.glob("*.json"))
 
 
+def test_the_committed_comparisons_are_found() -> None:
+    # The recompute test below is skipped when it finds no record, so this one fails.
+    assert _committed()
+
+
 @pytest.mark.parametrize("record", _committed(), ids=lambda path: path.stem)
 def test_every_committed_comparison_recomputes(record: Path, tmp_path: Path) -> None:
     # A published difference must come back from the two runs it names.

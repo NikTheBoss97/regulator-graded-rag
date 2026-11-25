@@ -1,0 +1,13 @@
+# Author: Nicola Antonello
+# E1: dense retrieval with bge-base-en-v1.5 against the BM25 baseline (ADR-0009). The
+# query prompt is the model card's instruction at this revision, verified on 2026-11-25;
+# passages get none. A config that produced a committed run is never edited (ADR-0023).
+name = "dense-bge-base"
+
+[[first_stage]]
+kind = "dense"
+model = "BAAI/bge-base-en-v1.5"
+revision = "a5beb1e3e68b9ab74eb54cfd186867f64f240e1a"
+weights_sha256 = "c7c1988aae201f80cf91a5dbbd5866409503b89dcaba877ca6dba7dd0a5167d7"
+query_prompt = "Represent this sentence for searching relevant passages: "
+max_length = 512

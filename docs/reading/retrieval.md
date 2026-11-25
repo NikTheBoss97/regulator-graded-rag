@@ -2,8 +2,8 @@
 
 # Retrieval
 
-Keyword search, dense and hybrid retrieval, reranking and vector search. Part of the
-[reading list](README.md).
+Keyword search, dense and hybrid retrieval, reranking, retrieval on regulations and
+vector search. Part of the [reading list](README.md).
 
 ## Keyword search
 
@@ -22,6 +22,13 @@ Keyword search, dense and hybrid retrieval, reranking and vector search. Part of
 - Vladimir Karpukhin et al., [Dense Passage Retrieval for Open-Domain Question Answering](https://doi.org/10.18653/v1/2020.emnlp-main.550) (EMNLP, 2020). Separate question and passage encoders, trained so that matching pairs score high: the paper that showed dense retrieval beating BM25 on question answering benchmarks.
 - Rodrigo Nogueira and Kyunghyun Cho, [Passage Re-ranking with BERT](https://arxiv.org/abs/1901.04085) (arXiv, 2019). A cross-encoder that scores each question and passage pair: the simple design behind the reranking stage.
 - Gordon V. Cormack, Charles L. A. Clarke and Stefan Buettcher, [Reciprocal Rank Fusion Outperforms Condorcet and Individual Rank Learning Methods](https://doi.org/10.1145/1571941.1572114) (SIGIR, 2009). The origin of reciprocal rank fusion: combining rankings by rank alone, so scores need no calibration. Paired with Bruch et al.
+
+## Retrieval on regulations and statutes
+
+- Yeong-Joon Ju and Seong-Whan Lee, [Citation-Closure Retrieval and Per-Rule Attribution for Real-World Regulatory Compliance Question Answering](https://arxiv.org/abs/2605.29742) (arXiv, 2026). RegOps-Bench: on real compliance questions, dense retrieval leads BM25 by 21 points of top-10 recall, and following each rule's citations adds more.
+- Kyubyung Chae, Jewon Yeom, Jeongjae Park, Seunghyun Bae, Ijun Jang, Hyunbin Jin, Jinkwan Jang and Taesup Kim, [Beyond Case Law: Evaluating Structure-Aware Retrieval and Safety in Statute-Centric Legal QA](https://arxiv.org/abs/2604.06173) (arXiv, 2026). SearchFireSafety: on real questions about Korean fire-safety statutes, dense models more than double BM25's recall@10, and reciprocal rank fusion lowers the best one.
+- Tuba Gokhan, Kexin Wang, Iryna Gurevych and Ted Briscoe, [RIRAG: Regulatory Information Retrieval and Answer Generation](https://arxiv.org/abs/2409.05677) (arXiv, 2024). ObliQA: on questions generated from regulatory passages, BM25 comes within a few points of the best dense model. The contrast with real questions is what experiment 0001 tests on this corpus.
+- Antoine Louis and Gerasimos Spanakis, [A Statutory Article Retrieval Dataset in French](https://arxiv.org/abs/2108.11792) (arXiv, 2021). BSARD: lay questions about Belgian statutes, where a zero-shot dense model nearly fails against BM25 and a fine-tuned one wins; it names the wording gap, long articles and definitional provisions as the difficulties.
 
 ## Vector search
 

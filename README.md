@@ -50,6 +50,7 @@ compliance or legal advice.
 | Run | Retriever | Settings | Recall@10 | Recall@5 | Recall@20 | Recall@50 | MRR | nDCG@10 | Median seconds |
 |---|---|---|---:|---:|---:|---:|---:|---:|---:|
 | [2026-11-24-bm25-dev-1](eval/runs/2026-11-24-bm25-dev-1/) | bm25 | b=0.75, config=english, k1=1.2, variant=lucene | 0.691 | 0.610 | 0.761 | 0.856 | 0.575 | 0.558 | 0.050 |
+| [2026-11-25-dense-bge-base-dev-1](eval/runs/2026-11-25-dense-bge-base-dev-1/) | dense-bge-base | [dense-bge-base.toml](eval/configs/dense-bge-base.toml) | 0.618 | 0.552 | 0.725 | 0.821 | 0.541 | 0.520 | 0.278 |
 <!-- results:end -->
 
 `uv run python -m regulator_graded_rag.report` writes this table from the committed run
