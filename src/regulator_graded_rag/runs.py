@@ -56,7 +56,11 @@ from regulator_graded_rag.metrics import (
     score_question,
     summarize,
 )
-from regulator_graded_rag.models import SentenceTransformerEncoder, WeightsMismatch
+from regulator_graded_rag.models import (
+    SentenceTransformerEncoder,
+    WeightsMismatch,
+    WeightsMissing,
+)
 from regulator_graded_rag.pipeline import build
 
 RUNS = Path("eval/runs")
@@ -497,7 +501,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         except ImportError:
             print('the models group is not installed: run "uv sync --group models"')
             return 1
-        except (StaleIndex, ConfigError, WeightsMismatch) as err:
+        except (StaleIndex, ConfigError, WeightsMismatch, WeightsMissing) as err:
             print(err)
             return 1
         existing = [path.name for path in runs.iterdir()] if runs.is_dir() else []

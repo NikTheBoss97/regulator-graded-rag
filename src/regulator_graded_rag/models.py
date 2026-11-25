@@ -5,7 +5,8 @@ They come from the models dependency group, which CI never installs, so torch,
 sentence-transformers and huggingface_hub are imported only inside the functions that
 use them. A model runs only from its pinned revision, once its weights file matches the
 SHA-256 its config pins; transformers then loads those safetensors weights, never a
-pickle file, and never code from the model's repository.
+pickle file, and never code from the model's repository. Every download is asked for:
+by default only the local cache is read, and missing weights are refused.
 """
 
 import hashlib
@@ -17,6 +18,10 @@ from regulator_graded_rag.configs import DenseStage
 
 class WeightsMismatch(RuntimeError):
     """A weights file that is not the one the config pins."""
+
+
+class WeightsMissing(RuntimeError):
+    """Weights that are not downloaded, where no download was asked for."""
 
 
 def require_sha256(path: Path, sha256: str) -> Path:
@@ -33,12 +38,18 @@ def require_sha256(path: Path, sha256: str) -> Path:
 
 
 def verified_file(
-    repo: str, revision: str, filename: str, sha256: str, *, offline: bool = False
+    repo: str, revision: str, filename: str, sha256: str, *, offline: bool = True
 ) -> Path:
-    """The file at the revision, from the Hugging Face cache or else the Hub, refused
-    unless it is the pinned one; offline, only the cache is read."""
+    """The file at the revision, refused unless it is the pinned one. Offline, the
+    default, only the Hugging Face cache is read and a missing file is refused; with
+    offline False, a missing file is downloaded from the Hub."""
     from huggingface_hub import hf_hub_download
 
+    if offline and cached_file(repo, revision, filename) is None:
+        raise WeightsMissing(
+            f"{repo}/{filename} at {revision} is not downloaded: run the embed command"
+            " with --download"
+        )
     found = hf_hub_download(
         repo_id=repo, filename=filename, revision=revision, local_files_only=offline
     )
@@ -58,7 +69,7 @@ class SentenceTransformerEncoder:
     """A dense stage's model through sentence-transformers. Vectors come back
     L2-normalized; texts longer than the stage's max_length are cut to it."""
 
-    def __init__(self, stage: DenseStage, *, offline: bool = False) -> None:
+    def __init__(self, stage: DenseStage, *, offline: bool = True) -> None:
         verified_file(
             stage.model,
             stage.revision,

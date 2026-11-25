@@ -3,8 +3,10 @@
 (ADR-0009).
 
 Usage: uv run --group models --env-file .env python -m regulator_graded_rag.embed
---config PATH, from the repository root.
+--config PATH [--download], from the repository root.
 
+The model's weights are read from the local cache; --download fetches any that are
+missing, and they are checked against the config's SHA-256 before loading either way.
 For each dense first stage of the config, the vectors file indexes/vectors/<model
 key>.f32 is computed when it is missing, from the index's passages in ordinal order, with
 a progress counter, and its header records how many passages hold more tokens than the
@@ -34,7 +36,11 @@ from regulator_graded_rag.embeddings import (
 )
 from regulator_graded_rag.index import SCHEMA, indexed_version
 from regulator_graded_rag.manifest import DEFAULT_MANIFEST, load_manifest
-from regulator_graded_rag.models import SentenceTransformerEncoder, WeightsMismatch
+from regulator_graded_rag.models import (
+    SentenceTransformerEncoder,
+    WeightsMismatch,
+    WeightsMissing,
+)
 
 VECTOR_DIR = Path("indexes/vectors")
 BATCH = 256
@@ -102,6 +108,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         description="Compute a dense config's passage vectors once, and load them.",
     )
     parser.add_argument("--config", type=Path, required=True)
+    parser.add_argument(
+        "--download",
+        action="store_true",
+        help="download a model's weights when they are not cached",
+    )
     args = parser.parse_args(argv)
     try:
         config = load_config(args.config)
@@ -128,7 +139,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     with connect(url) as conn:
         for stage in stages:
             try:
-                encoder = SentenceTransformerEncoder(stage)
+                encoder = SentenceTransformerEncoder(stage, offline=not args.download)
                 path = embed_stage(
                     conn,
                     stage,
@@ -139,7 +150,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             except ImportError:
                 print('the models group is not installed: run "uv sync --group models"')
                 return 1
-            except (ValueError, WeightsMismatch) as err:
+            except (ValueError, WeightsMismatch, WeightsMissing) as err:
                 print(err)
                 return 1
             header = read_header(path)
