@@ -57,12 +57,15 @@ def test_loading_refuses_a_mismatched_file(
     count = passage_count(db, test_index)
 
     def load(
-        path: Path, revision: str = REVISION, corpus_version: str = version
+        path: Path,
+        revision: str = REVISION,
+        corpus_version: str = version,
+        model: str = MODEL,
     ) -> None:
         load_vectors(
             db,
             path,
-            model=MODEL,
+            model=model,
             revision=revision,
             corpus_version=corpus_version,
             schema=vectors_schema,
@@ -82,6 +85,9 @@ def test_loading_refuses_a_mismatched_file(
     good = fixture_file(tmp_path / "good", count, version, {})
     with pytest.raises(ValueError, match="revision"):
         load(good, revision="fedcba9876543210")
+    # Another model's vectors, at the same revision label, are refused too.
+    with pytest.raises(ValueError, match="not other/model at revision"):
+        load(good, model="other/model")
     raw = bytearray(good.read_bytes())
     raw[-1] ^= 0x01
     good.write_bytes(bytes(raw))
