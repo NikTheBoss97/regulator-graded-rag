@@ -21,9 +21,26 @@ dev = [
     "ruff==0.17.3",
     "zizmor==1.31.1",
 ]
+# The local embedding and reranking models (ADR-0009). CI never installs this group,
+# and no module imports these packages when it loads.
+models = [
+    "sentence-transformers==6.3.0",
+    "torch==2.14.1",
+    "transformers==5.23.0",
+]
 
 [tool.uv]
 required-version = ">=0.12.17"
+
+# PyTorch's CUDA 12.6 build on Windows, where published runs are made, and PyPI's
+# build elsewhere (ADR-0009).
+[tool.uv.sources]
+torch = [{ index = "pytorch-cu126", marker = "sys_platform == 'win32'" }]
+
+[[tool.uv.index]]
+name = "pytorch-cu126"
+url = "https://download.pytorch.org/whl/cu126"
+explicit = true
 
 [tool.ruff]
 target-version = "py314"
@@ -35,6 +52,11 @@ files = ["src", "tests", "tools"]
 # repository root (tests.unit.x), so same-named files and imports between tests resolve.
 explicit_package_bases = true
 mypy_path = ["src"]
+
+# The models group is not installed in CI, so its packages may be missing there.
+[[tool.mypy.overrides]]
+module = ["huggingface_hub.*", "sentence_transformers.*", "torch.*", "transformers.*"]
+ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
