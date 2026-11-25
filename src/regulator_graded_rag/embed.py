@@ -61,12 +61,14 @@ def embed_stage(
     path. progress hears how many passages are done, and how many there are."""
     path = folder / f"{model_key(stage.model, stage.revision)}.f32"
     if path.exists():
-        made_with = read_header(path).get("max_length")
-        if made_with != stage.max_length:
-            raise ValueError(
-                f"{path.as_posix()} was made with max_length {made_with}, not"
-                f" {stage.max_length}: delete it to compute it again"
-            )
+        made = read_header(path)
+        for setting in ("max_length", "dtype"):
+            # A file from before dtype was recorded names none, so it is not reused.
+            if made.get(setting) != getattr(stage, setting):
+                raise ValueError(
+                    f"{path.as_posix()} was made with {setting} {made.get(setting)},"
+                    f" not {getattr(stage, setting)}: delete it to compute it again"
+                )
     else:
         indexed = indexed_version(conn, index_schema)
         if indexed != corpus_version:
@@ -87,6 +89,7 @@ def embed_stage(
             "revision": stage.revision,
             "corpus_version": corpus_version,
             "max_length": stage.max_length,
+            "dtype": stage.dtype,
             "truncated": encoder.too_long(texts),
         }
         write_vectors(path, vectors, header)

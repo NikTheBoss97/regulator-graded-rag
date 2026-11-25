@@ -24,7 +24,7 @@ import re
 import sys
 from collections.abc import Iterator, Mapping, Sequence
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any, NamedTuple, Protocol
 
 from psycopg import sql
 
@@ -46,6 +46,28 @@ CREATE TABLE IF NOT EXISTS {s}.meta (
 )
 """
 
+# A table made before max_length, truncated and dtype were recorded gains them, empty.
+_META_COLUMNS = """
+ALTER TABLE {s}.meta
+  ADD COLUMN IF NOT EXISTS max_length integer,
+  ADD COLUMN IF NOT EXISTS truncated integer,
+  ADD COLUMN IF NOT EXISTS dtype text
+"""
+
+
+class VectorsMeta(NamedTuple):
+    """A model's loaded vectors: their corpus version, dimension and SHA-256, and the
+    input length, the count of passages cut to it and the precision they were made
+    with; the last three are None for vectors loaded before they were recorded."""
+
+    corpus_version: str
+    dim: int
+    sha256: str
+    max_length: int | None
+    truncated: int | None
+    dtype: str | None
+
+
 _NEAREST = """
 SELECT p.id, 1 - (v.embedding <=> %(query)s::vector) AS score
 FROM {vs}.{key} v
@@ -66,6 +88,10 @@ class Encoder(Protocol):
 
     def too_long(self, texts: Sequence[str]) -> int:
         """How many texts hold more tokens than the model reads."""
+        ...
+
+    def runtime(self) -> Mapping[str, str]:
+        """The GPU, and torch's and CUDA's versions, the model runs on."""
         ...
 
 
@@ -197,6 +223,7 @@ def load_vectors(
         conn.execute("CREATE EXTENSION IF NOT EXISTS vector")
         conn.execute(sql.SQL("CREATE SCHEMA IF NOT EXISTS {s}").format(s=s))
         conn.execute(sql.SQL(_META).format(s=s))
+        conn.execute(sql.SQL(_META_COLUMNS).format(s=s))
         conn.execute(sql.SQL("DROP TABLE IF EXISTS {t}").format(t=table))
         conn.execute(
             sql.SQL(
@@ -213,29 +240,49 @@ def load_vectors(
         )
         conn.execute(
             sql.SQL(
-                "INSERT INTO {s}.meta"
-                " (model_key, model, revision, corpus_version, count, dim, sha256)"
-                " VALUES (%s, %s, %s, %s, %s, %s, %s)"
+                "INSERT INTO {s}.meta (model_key, model, revision, corpus_version,"
+                " count, dim, sha256, max_length, truncated, dtype)"
+                " VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
             ).format(s=s),
-            (key, model, revision, corpus_version, passages, dim, header["sha256"]),
+            (
+                key,
+                model,
+                revision,
+                corpus_version,
+                passages,
+                dim,
+                header["sha256"],
+                header.get("max_length"),
+                header.get("truncated"),
+                header.get("dtype"),
+            ),
         )
 
 
-def vectors_meta(
-    conn: Conn, key: str, schema: str = VECTORS
-) -> tuple[str, int, str] | None:
-    """The corpus version, dimension and SHA-256 of the model's loaded vectors; None
-    when none are loaded."""
+def vectors_meta(conn: Conn, key: str, schema: str = VECTORS) -> VectorsMeta | None:
+    """The model's loaded vectors as the meta table records them; None when none are
+    loaded. The row is read whole, so a table made before the later columns reads
+    them as None."""
     found = conn.execute("SELECT to_regclass(%s)", (f"{schema}.meta",)).fetchone()
     if found is None or found[0] is None:
         return None
     row = conn.execute(
-        sql.SQL(
-            "SELECT corpus_version, dim, sha256 FROM {s}.meta WHERE model_key = %s"
-        ).format(s=sql.Identifier(schema)),
+        sql.SQL("SELECT to_jsonb(m) FROM {s}.meta m WHERE model_key = %s").format(
+            s=sql.Identifier(schema)
+        ),
         (key,),
     ).fetchone()
-    return None if row is None else (str(row[0]), int(row[1]), str(row[2]))
+    if row is None:
+        return None
+    meta: dict[str, Any] = row[0]
+    return VectorsMeta(
+        str(meta["corpus_version"]),
+        int(meta["dim"]),
+        str(meta["sha256"]),
+        meta.get("max_length"),
+        meta.get("truncated"),
+        meta.get("dtype"),
+    )
 
 
 def nearest(

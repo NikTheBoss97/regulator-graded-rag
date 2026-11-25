@@ -52,6 +52,9 @@ def test_models_smoke() -> None:
     assert near > far
     # The prompt reaches the model: without it the question embeds differently.
     assert encoder.queries(["Must a lithium battery be protected?"], "") != [query]
+    # The run record names the libraries and the GPU the model ran on.
+    runtime = encoder.runtime()
+    assert runtime["torch"].startswith("2.14.1") and runtime["gpu"]
 
 
 def test_cached_weights_with_another_checksum_are_refused() -> None:

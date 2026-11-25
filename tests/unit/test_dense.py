@@ -11,7 +11,7 @@ from regulator_graded_rag.bm25 import Conn, Hit, StaleIndex
 from regulator_graded_rag.cache import StageCache
 from regulator_graded_rag.configs import DenseStage, load_config
 from regulator_graded_rag.dense import Dense
-from regulator_graded_rag.embeddings import model_key
+from regulator_graded_rag.embeddings import VectorsMeta, model_key
 from regulator_graded_rag.pipeline import build
 
 SHA = "a" * 64
@@ -47,19 +47,29 @@ class FakeEncoder:
     def too_long(self, texts: Sequence[str]) -> int:
         return 0
 
+    def runtime(self) -> dict[str, str]:
+        return {"gpu": "test GPU", "torch": "2.14.1", "cuda": "12.6"}
+
+
+FRESH = VectorsMeta(CORPUS, 3, SHA, 512, 7, "float32")
+
 
 @pytest.mark.parametrize(
     ("meta", "match"),
     [
         (None, "no vectors"),
-        (("d" * 64, 3, SHA), "corpus version"),
-        ((CORPUS, 768, SHA), "dimension"),
+        (FRESH._replace(corpus_version="d" * 64), "corpus version"),
+        (FRESH._replace(dim=768), "dimension"),
+        (FRESH._replace(dtype="float16"), "dtype"),
+        (FRESH._replace(dtype=None), "dtype"),
+        (FRESH._replace(max_length=256), "max_length"),
     ],
 )
 def test_dense_refuses_a_stale_vector_table(
-    monkeypatch: pytest.MonkeyPatch, meta: tuple[str, int, str] | None, match: str
+    monkeypatch: pytest.MonkeyPatch, meta: VectorsMeta | None, match: str
 ) -> None:
-    # Vectors of another corpus, or of a model of another size, rank the wrong passages.
+    # Vectors of another corpus, of a model of another size, or made at another
+    # precision or input length than the config states rank the wrong passages.
     monkeypatch.setattr(dense_module, "vectors_meta", lambda conn, key, schema: meta)
     with pytest.raises(StaleIndex, match=match) as raised:
         Dense(
@@ -73,9 +83,7 @@ def test_dense_refuses_an_index_of_another_corpus_version(
 ) -> None:
     # The vectors are keyed by passage ordinal, so over an index rebuilt for another
     # corpus every vector would name the wrong passage, as BM25 already refuses.
-    monkeypatch.setattr(
-        dense_module, "vectors_meta", lambda conn, key, schema: (CORPUS, 3, SHA)
-    )
+    monkeypatch.setattr(dense_module, "vectors_meta", lambda conn, key, schema: FRESH)
     monkeypatch.setattr(dense_module, "indexed_version", lambda conn, schema: "d" * 64)
     with pytest.raises(StaleIndex, match="the index holds corpus version") as raised:
         Dense(
@@ -102,7 +110,15 @@ def test_a_dense_config_builds_a_dense_stage(
             made.append((stage, corpus_version, encoder, index_schema))
 
         def identity(self) -> dict[str, object]:
-            return {"vectors_sha256": "v" * 64}
+            return {
+                "vectors_sha256": "v" * 64,
+                "dtype": "float32",
+                "truncated": 7,
+                "gpu": "test GPU",
+                "torch": "2.14.1",
+                "cuda": "12.6",
+                "server": "PostgreSQL",
+            }
 
         def search(self, question: str, k: int) -> list[Hit]:
             return [Hit("171.1:1", 0.9)][:k]
@@ -121,6 +137,19 @@ def test_a_dense_config_builds_a_dense_stage(
         encoders={model_key(STAGE.model, STAGE.revision): encoder},
     )
     assert made == [(config.first[0], CORPUS, encoder, "rgr")]
-    # The run record names the exact embeddings the stage searched.
-    assert pipeline.settings()["vectors_sha256"] == "v" * 64
+    # The run record names the exact embeddings the stage searched, the precision, how
+    # many passages were cut, and the GPU and libraries that embedded the questions.
+    settings = pipeline.settings()
+    assert {key: settings[key] for key in settings if key.startswith("config")} == {
+        "config_file": path.as_posix(),
+        "config_sha256": config.sha256,
+    }
+    assert {key: settings[key] for key in settings if not key.startswith("config")} == {
+        "vectors_sha256": "v" * 64,
+        "dtype": "float32",
+        "truncated": 7,
+        "gpu": "test GPU",
+        "torch": "2.14.1",
+        "cuda": "12.6",
+    }
     assert pipeline.search("Is it?", 1) == [Hit("171.1:1", 0.9)]

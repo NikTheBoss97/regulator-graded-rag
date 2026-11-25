@@ -39,6 +39,33 @@ def test_vectors_made_with_another_max_length_are_not_reused(tmp_path: Path) -> 
         )
 
 
+@pytest.mark.parametrize("dtype", ["float16", None])
+def test_vectors_made_at_another_precision_are_not_reused(
+    tmp_path: Path, dtype: str | None
+) -> None:
+    # A file from before precisions were recorded names none, so it is not reused
+    # either: its precision is not known.
+    key = model_key(STAGE.model, STAGE.revision)
+    header: dict[str, object] = {
+        "model": STAGE.model,
+        "revision": STAGE.revision,
+        "corpus_version": CORPUS,
+        "max_length": 512,
+        "truncated": 0,
+    }
+    if dtype is not None:
+        header["dtype"] = dtype
+    write_vectors(tmp_path / f"{key}.f32", [[1.0, 0.0, 0.0]], header)
+    with pytest.raises(ValueError, match="dtype"):
+        embed_stage(
+            cast(Conn, None),
+            STAGE,
+            FakeEncoder(),
+            corpus_version=CORPUS,
+            folder=tmp_path,
+        )
+
+
 def test_a_file_with_another_sha256_is_refused(tmp_path: Path) -> None:
     # Weights are loaded only when they are the file the config pins.
     path = tmp_path / "model.safetensors"

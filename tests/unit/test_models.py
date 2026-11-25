@@ -76,7 +76,7 @@ def test_the_encoder_loads_only_verified_safetensors_without_remote_code(
                 "revision": "rev1",
                 "trust_remote_code": False,
                 "local_files_only": True,
-                "model_kwargs": {"use_safetensors": True},
+                "model_kwargs": {"use_safetensors": True, "dtype": "float32"},
             },
         ),
     ]
