@@ -68,6 +68,22 @@ def test_dense_refuses_a_stale_vector_table(
     assert "regulator_graded_rag.embed" in str(raised.value)
 
 
+def test_dense_refuses_an_index_of_another_corpus_version(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The vectors are keyed by passage ordinal, so over an index rebuilt for another
+    # corpus every vector would name the wrong passage, as BM25 already refuses.
+    monkeypatch.setattr(
+        dense_module, "vectors_meta", lambda conn, key, schema: (CORPUS, 3, SHA)
+    )
+    monkeypatch.setattr(dense_module, "indexed_version", lambda conn, schema: "d" * 64)
+    with pytest.raises(StaleIndex, match="the index holds corpus version") as raised:
+        Dense(
+            cast(Conn, None), stage=STAGE, corpus_version=CORPUS, encoder=FakeEncoder()
+        )
+    assert "regulator_graded_rag.index" in str(raised.value)
+
+
 def test_a_dense_config_builds_a_dense_stage(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

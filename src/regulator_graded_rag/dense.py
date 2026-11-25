@@ -4,7 +4,9 @@
 The question is embedded with the stage's model and prompt, then compared with every
 passage's stored vector by cosine distance, exactly, as embeddings.nearest does. The
 stage refuses to search vectors that are missing, made for another corpus version, or
-of another dimension than its model's, and names the command that makes them.
+of another dimension than its model's, and names the command that makes them. It also
+refuses an index of another corpus version, as BM25 does: the vectors are keyed by
+passage ordinal, so over another corpus's passages each would name the wrong one.
 """
 
 from collections.abc import Mapping
@@ -18,7 +20,7 @@ from regulator_graded_rag.embeddings import (
     nearest,
     vectors_meta,
 )
-from regulator_graded_rag.index import SCHEMA
+from regulator_graded_rag.index import SCHEMA, indexed_version
 
 EMBED = (
     'run "uv run --group models --env-file .env python -m regulator_graded_rag.embed'
@@ -55,6 +57,12 @@ class Dense:
             raise StaleIndex(
                 f"the vectors for {stage.model} have dimension {dim}, but its model"
                 f" gives {encoder.dim}: {EMBED}"
+            )
+        indexed = indexed_version(conn, index_schema)
+        if indexed != corpus_version:
+            raise StaleIndex(
+                f"the index holds corpus version {indexed}, not {corpus_version}:"
+                ' run "uv run python -m regulator_graded_rag.index"'
             )
         row = conn.execute(
             "SELECT version(),"
