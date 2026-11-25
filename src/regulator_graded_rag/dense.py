@@ -3,8 +3,9 @@
 
 The question is embedded with the stage's model and prompt, then compared with every
 passage's stored vector by cosine distance, exactly, as embeddings.nearest does. The
-stage refuses to search vectors that are missing, made for another corpus version, or
-of another dimension than its model's, and names the command that makes them. It also
+stage refuses to search vectors that are missing, made for another corpus version, of
+another dimension than its model's, or with another precision or input length than its
+config states, and names the command that makes them. It also
 refuses an index of another corpus version, as BM25 does: the vectors are keyed by
 passage ordinal, so over another corpus's passages each would name the wrong one.
 """
@@ -47,16 +48,25 @@ class Dense:
             raise StaleIndex(
                 f"no vectors for {stage.model} at {stage.revision}: {EMBED}"
             )
-        made_for, dim, sha256 = meta
-        if made_for != corpus_version:
+        if meta.corpus_version != corpus_version:
             raise StaleIndex(
-                f"the vectors for {stage.model} hold corpus version {made_for}, not"
-                f" {corpus_version}: {EMBED}"
+                f"the vectors for {stage.model} hold corpus version"
+                f" {meta.corpus_version}, not {corpus_version}: {EMBED}"
             )
-        if dim != encoder.dim:
+        if meta.dim != encoder.dim:
             raise StaleIndex(
-                f"the vectors for {stage.model} have dimension {dim}, but its model"
-                f" gives {encoder.dim}: {EMBED}"
+                f"the vectors for {stage.model} have dimension {meta.dim}, but its"
+                f" model gives {encoder.dim}: {EMBED}"
+            )
+        if meta.dtype != stage.dtype:
+            raise StaleIndex(
+                f"the vectors for {stage.model} were made with dtype {meta.dtype}, not"
+                f" {stage.dtype}: {EMBED}"
+            )
+        if meta.max_length != stage.max_length:
+            raise StaleIndex(
+                f"the vectors for {stage.model} were made with max_length"
+                f" {meta.max_length}, not {stage.max_length}: {EMBED}"
             )
         indexed = indexed_version(conn, index_schema)
         if indexed != corpus_version:
@@ -75,15 +85,20 @@ class Dense:
         self._key = key
         self._schema = schema
         self._index_schema = index_schema
-        self._identity = {
-            "vectors_sha256": sha256,
+        self._identity: dict[str, object] = {
+            "vectors_sha256": meta.sha256,
+            "dtype": meta.dtype,
+            "truncated": meta.truncated,
             "server": str(server),
             "pgvector": str(pgvector),
+            **encoder.runtime(),
         }
 
     def identity(self) -> Mapping[str, object]:
-        """What a search reads besides its settings: the vectors, by their SHA-256, and
-        the server and pgvector release that compute the distances."""
+        """What a search reads besides its settings: the vectors, by their SHA-256, with
+        the precision they were made in and the count of passages cut to the input
+        length; the server and pgvector release that compute the distances; and the GPU
+        and torch's and CUDA's versions that embed the question."""
         return self._identity
 
     def search(self, question: str, k: int) -> list[Hit]:

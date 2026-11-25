@@ -7,10 +7,12 @@ import psycopg
 import pytest
 
 from regulator_graded_rag.embeddings import (
+    VectorsMeta,
     load_vectors,
     model_key,
     nearest,
     read_header,
+    vectors_meta,
     write_vectors,
 )
 from regulator_graded_rag.manifest import Manifest
@@ -44,7 +46,9 @@ def fixture_file(
         "model": MODEL,
         "revision": REVISION,
         "corpus_version": corpus_version,
-        "truncated": 0,
+        "max_length": 512,
+        "dtype": "float32",
+        "truncated": 2,
     }
     write_vectors(path, rows, header)
     return path
@@ -116,11 +120,16 @@ def test_exact_search_orders_by_cosine_then_ordinal(
         index_schema=test_index,
     )
     meta = db.execute(
-        f"SELECT model, revision, corpus_version, count, dim, sha256 FROM {VECTORS}.meta"
-        " WHERE model_key = %s",
+        f"SELECT model, revision, corpus_version, count, dim, sha256, max_length,"
+        f" truncated, dtype FROM {VECTORS}.meta WHERE model_key = %s",
         (KEY,),
     ).fetchone()
-    assert meta == (MODEL, REVISION, version, count, 3, read_header(path)["sha256"])
+    sha256 = read_header(path)["sha256"]
+    assert meta == (MODEL, REVISION, version, count, 3, sha256, 512, 2, "float32")
+    # The reader gives the same row back.
+    assert vectors_meta(db, KEY, vectors_schema) == VectorsMeta(
+        version, 3, sha256, 512, 2, "float32"
+    )
     # The tie must not lean on the table's physical order: rewriting ordinal 3's row
     # moves it after ordinal 5's.
     db.execute(f"UPDATE {VECTORS}.{KEY} SET embedding = embedding WHERE ordinal = 3")

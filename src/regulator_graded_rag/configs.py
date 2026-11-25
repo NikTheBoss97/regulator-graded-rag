@@ -12,7 +12,8 @@ new config with a new name.
 A config runs exactly as written or not at all. Each table may hold only the keys its
 kind uses, so a misspelt key is refused rather than left out; a dense stage states its
 query prompt, "" for a model without one; and a value out of its range is refused
-rather than rounded or capped.
+rather than rounded or capped. A dense stage's dtype, the precision its model runs in,
+is float32 unless the config states float16 or bfloat16 (ADR-0009).
 """
 
 import hashlib
@@ -25,6 +26,7 @@ from typing import Any, TypeIs
 from regulator_graded_rag.metrics import DEPTH
 
 LOADERS = ("cross-encoder", "transformers")
+DTYPES = ("float32", "float16", "bfloat16")
 _SHA256 = re.compile(r"[0-9a-f]{64}")
 _KEYS = {
     "config": {"name", "first_stage", "fusion", "rerank", "cv"},
@@ -36,6 +38,7 @@ _KEYS = {
         "weights_sha256",
         "query_prompt",
         "max_length",
+        "dtype",
     },
     "rrf": {"method", "k"},
     "weighted": {"method", "alpha"},
@@ -61,6 +64,7 @@ class DenseStage:
     weights_sha256: str
     query_prompt: str
     max_length: int
+    dtype: str = "float32"
 
 
 @dataclass(frozen=True)
@@ -167,8 +171,16 @@ def _stage(value: object, where: str) -> Bm25Stage | DenseStage:
         prompt = table.get("query_prompt")
         if not isinstance(prompt, str):
             raise ConfigError(f'{where} needs query_prompt, "" for a model without one')
+        dtype = table.get("dtype", "float32")
+        if dtype not in DTYPES:
+            raise ConfigError(f"{where}: dtype must be one of {', '.join(DTYPES)}")
         return DenseStage(
-            model, revision, sha256, prompt, _number(table, "max_length", where)
+            model,
+            revision,
+            sha256,
+            prompt,
+            _number(table, "max_length", where),
+            dtype,
         )
     raise ConfigError(f"{where}: unknown first-stage kind {kind!r}")
 

@@ -44,6 +44,9 @@ class KeywordEncoder:
     def too_long(self, texts: Sequence[str]) -> int:
         return sum(len(text) > 1000 for text in texts)
 
+    def runtime(self) -> dict[str, str]:
+        return {"gpu": "test GPU", "torch": "2.14.1", "cuda": "12.6"}
+
 
 @pytest.fixture
 def vectors_schema(db: Conn) -> Iterator[str]:
@@ -87,6 +90,7 @@ def test_dense_search_finds_the_nearest_fixture_passage(
     path = embed()
     header = read_header(path)
     assert (header["count"], header["max_length"]) == (len(texts), 512)
+    assert header["dtype"] == "float32"
     long_ones = sum(len(text) > 1000 for text in texts.values())
     assert long_ones > 0 and header["truncated"] == long_ones
     dense = Dense(
@@ -100,9 +104,16 @@ def test_dense_search_finds_the_nearest_fixture_passage(
     hits = dense.search("Which passage?", 3)
     assert hits[0].passage_id == target and hits[0].score == pytest.approx(1.0)
     assert [hit.score for hit in hits[1:]] == pytest.approx([0.0, 0.0], abs=1e-6)
-    # The question goes in with the stage's prompt, and the stage names its vectors.
+    # The question goes in with the stage's prompt, and the stage names its vectors,
+    # their precision and cut passages, read back from the meta table, and its runtime.
     assert encoder.prompts == ["Q: "]
-    assert dense.identity()["vectors_sha256"] == header["sha256"]
+    identity = dense.identity()
+    assert {key: identity[key] for key in ("vectors_sha256", "dtype", "truncated")} == {
+        "vectors_sha256": header["sha256"],
+        "dtype": "float32",
+        "truncated": long_ones,
+    }
+    assert {key: identity[key] for key in ("gpu", "torch", "cuda")} == encoder.runtime()
     # A second embed finds the file and loads it again, computing nothing.
     seen = encoder.passages_seen
     assert embed() == path and encoder.passages_seen == seen

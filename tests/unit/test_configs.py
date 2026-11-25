@@ -132,6 +132,7 @@ RERANK = (
         (BM25 + DENSE + RRF_GRID + CV.replace("folds = 5", "folds = 1"), "folds"),
         (BM25 + CV, "no grid"),
         ('first_stage = ["bm25"]\n', "not a table"),
+        (DENSE + 'dtype = "int8"\n', "dtype must be"),
     ],
 )
 def test_a_config_that_would_run_other_than_written_is_refused(
@@ -139,6 +140,15 @@ def test_a_config_that_would_run_other_than_written_is_refused(
 ) -> None:
     with pytest.raises(ConfigError, match=match):
         load_config(write(tmp_path, "c", body))
+
+
+def test_a_dense_stage_states_its_precision_or_runs_in_float32(tmp_path: Path) -> None:
+    # The precision a model runs in can change its vectors, so it is a setting; a config
+    # that states none, as E1's, runs in float32, the precision E1 ran in.
+    stage = load_config(write(tmp_path, "dense", DENSE)).first[0]
+    assert isinstance(stage, DenseStage) and stage.dtype == "float32"
+    half = load_config(write(tmp_path, "half", DENSE + 'dtype = "bfloat16"\n'))
+    assert isinstance(half.first[0], DenseStage) and half.first[0].dtype == "bfloat16"
 
 
 def test_a_prompt_keeps_its_newline(tmp_path: Path) -> None:

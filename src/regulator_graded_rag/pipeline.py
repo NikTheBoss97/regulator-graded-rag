@@ -36,6 +36,8 @@ from regulator_graded_rag.metrics import DEPTH
 
 PACKAGE = Path(__file__).resolve().parent
 LOCK = PACKAGE.parents[1] / "uv.lock"
+# The parts of a stage's identity that a run record names.
+RECORDED = ("vectors_sha256", "dtype", "truncated", "gpu", "torch", "cuda")
 
 
 def code_digest() -> str:
@@ -90,21 +92,23 @@ class Pipeline:
                 config.first, first, identities, strict=True
             )
         ]
-        self._vectors = [
-            str(identity["vectors_sha256"])
-            for identity in identities
-            if "vectors_sha256" in identity
-        ]
+        self._identities = identities
 
     def settings(self) -> dict[str, str | float]:
-        """The config by path and SHA-256, and a dense stage's vectors by SHA-256, so a
-        run record names the exact embeddings it searched."""
+        """The config by path and SHA-256, and for a dense stage the parts of its
+        identity a run record names (RECORDED): the exact embeddings it searched, their
+        precision, how many passages were cut, and the GPU and libraries that embedded
+        the questions."""
         found: dict[str, str | float] = {
             "config_file": self._config.path,
             "config_sha256": self._config.sha256,
         }
-        if self._vectors:
-            found["vectors_sha256"] = ",".join(self._vectors)
+        for key in RECORDED:
+            values = [identity[key] for identity in self._identities if key in identity]
+            if len(values) == 1 and isinstance(values[0], int | float):
+                found[key] = values[0]
+            elif values:
+                found[key] = ",".join(str(value) for value in values)
         return found
 
     def _cached(self, key: str, stage: Stage, question: str) -> Entry:

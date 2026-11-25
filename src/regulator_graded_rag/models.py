@@ -66,8 +66,9 @@ def cached_file(repo: str, revision: str, filename: str) -> Path | None:
 
 
 class SentenceTransformerEncoder:
-    """A dense stage's model through sentence-transformers. Vectors come back
-    L2-normalized; texts longer than the stage's max_length are cut to it."""
+    """A dense stage's model through sentence-transformers, in the precision its config
+    states. Vectors come back L2-normalized; texts longer than the stage's max_length
+    are cut to it."""
 
     def __init__(self, stage: DenseStage, *, offline: bool = True) -> None:
         verified_file(
@@ -84,10 +85,22 @@ class SentenceTransformerEncoder:
             revision=stage.revision,
             trust_remote_code=False,
             local_files_only=offline,
-            model_kwargs={"use_safetensors": True},
+            model_kwargs={"use_safetensors": True, "dtype": stage.dtype},
         )
         self._model.max_seq_length = stage.max_length
         self.dim = int(self._model.get_embedding_dimension())
+
+    def runtime(self) -> dict[str, str]:
+        """The GPU, or "cpu", and torch's and CUDA's versions the model runs on."""
+        import torch
+
+        device = self._model.device
+        gpu = torch.cuda.get_device_name(device) if device.type == "cuda" else "cpu"
+        return {
+            "gpu": str(gpu),
+            "torch": str(torch.__version__),
+            "cuda": str(torch.version.cuda or "none"),
+        }
 
     def _encode(self, texts: Sequence[str], prompt: str) -> list[list[float]]:
         vectors = self._model.encode(
