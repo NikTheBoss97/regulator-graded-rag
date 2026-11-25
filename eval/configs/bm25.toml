@@ -1,0 +1,9 @@
+# Author: Nicola Antonello
+# The BM25 baseline: the settings of the committed run 2026-11-24-bm25-dev-1
+# (ADR-0005). A config that produced a committed run is never edited (ADR-0023).
+name = "bm25"
+
+[[first_stage]]
+kind = "bm25"
+k1 = 1.2
+b = 0.75
