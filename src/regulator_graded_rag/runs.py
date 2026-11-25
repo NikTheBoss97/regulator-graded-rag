@@ -44,8 +44,9 @@ from typing import Any, Protocol, runtime_checkable
 
 from regulator_graded_rag.bm25 import BM25, K1, B, Retriever, StaleIndex
 from regulator_graded_rag.cache import CACHE_ROOT, StageCache
-from regulator_graded_rag.configs import Config, ConfigError, load_config
+from regulator_graded_rag.configs import Config, ConfigError, DenseStage, load_config
 from regulator_graded_rag.db import connect, database_url
+from regulator_graded_rag.embeddings import model_key
 from regulator_graded_rag.gold import Item, gold_version, load_items
 from regulator_graded_rag.manifest import DEFAULT_MANIFEST, load_manifest
 from regulator_graded_rag.metrics import (
@@ -55,6 +56,7 @@ from regulator_graded_rag.metrics import (
     score_question,
     summarize,
 )
+from regulator_graded_rag.models import SentenceTransformerEncoder, WeightsMismatch
 from regulator_graded_rag.pipeline import build
 
 RUNS = Path("eval/runs")
@@ -478,10 +480,24 @@ def main(argv: Sequence[str] | None = None) -> int:
                 retriever = BM25(conn, corpus_version=corpus_version, k1=k1, b=b)
             else:
                 cache = StageCache(cache_root(args.split))
+                encoders = {
+                    model_key(stage.model, stage.revision): SentenceTransformerEncoder(
+                        stage
+                    )
+                    for stage in config.first
+                    if isinstance(stage, DenseStage)
+                }
                 retriever = build(
-                    config, conn, corpus_version=corpus_version, cache=cache
+                    config,
+                    conn,
+                    corpus_version=corpus_version,
+                    cache=cache,
+                    encoders=encoders,
                 )
-        except (StaleIndex, ConfigError) as err:
+        except ImportError:
+            print('the models group is not installed: run "uv sync --group models"')
+            return 1
+        except (StaleIndex, ConfigError, WeightsMismatch) as err:
             print(err)
             return 1
         existing = [path.name for path in runs.iterdir()] if runs.is_dir() else []

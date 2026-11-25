@@ -53,10 +53,12 @@ files = ["src", "tests", "tools"]
 explicit_package_bases = true
 mypy_path = ["src"]
 
-# The models group is not installed in CI, so its packages may be missing there.
+# The models group is not installed in CI, so its packages may be missing there; where
+# they are installed, mypy does not follow them either, so both machines check alike.
 [[tool.mypy.overrides]]
 module = ["huggingface_hub.*", "sentence_transformers.*", "torch.*", "transformers.*"]
 ignore_missing_imports = true
+follow_imports = "skip"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

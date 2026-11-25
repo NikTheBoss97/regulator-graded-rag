@@ -172,7 +172,10 @@ def test_build_keys_its_stage_by_the_code_digest(
             '[fusion]\nmethod = "rrf"\nk = [10, 60]\n[cv]\nfolds = 5\nseed = "s"\n',
             "tunes k",
         ),
-        ("dense", "", "single bm25"),
+        # Fusion comes with its own experiments.
+        ("fused", '[fusion]\nmethod = "rrf"\nk = 60\n', "single first stage"),
+        # A dense stage cannot search without its model.
+        ("dense", "", "no encoder"),
     ],
 )
 def test_build_refuses_a_grid_or_a_stage_it_cannot_run(
