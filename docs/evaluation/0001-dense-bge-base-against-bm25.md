@@ -58,7 +58,8 @@ whole paper.
   loading. Questions get the model card's instruction,
   `Represent this sentence for searching relevant passages: `; passages get none. The
   model reads at most 512 tokens, and 20 of the 13,539 passages are longer, so their ends
-  are cut.
+  are cut. The embed command counts them and keeps the count in the vectors file's
+  header, which is not committed; running it again recomputes the count.
 - **Libraries:** torch 2.14.1 (CUDA 12.6), sentence-transformers 6.3.0, transformers
   5.23.0 ([ADR-0009](../adr/0009-local-retrieval-models-and-exact-search.md)).
 - **Search:** the passages' 768-dimension vectors, SHA-256
@@ -70,7 +71,9 @@ whole paper.
   [ADR-0023](../adr/0023-experiments-as-configs-run-by-one-cached-pipeline.md).
 - **Runs:** the baseline `2026-11-24-bm25-dev-1` ran at commit `5cf37c3` (tree
   `68e22c96`); this experiment's `2026-11-25-dense-bge-base-dev-1` ran at commit
-  `05ea125` (tree `bf4e56a0`), with no uncommitted changes. Both ran on corpus version
+  `05ea125` (tree `bf4e56a0`), with no uncommitted changes to tracked files. Its config
+  was not yet committed then; run.json holds its whole text, which equals the config
+  committed with the records. Both ran on corpus version
   `ecaac596…` and gold set `7bfdfdf9…`: 250 dev items, 214 of them answerable and scored.
 - **Decision:** the paired randomization test of ADR-0024 on per-question section
   recall@10, 100,000 sign flips from the seed `phase-3-paired-2026-11-25`, and a 95%
@@ -105,28 +108,35 @@ The difference in section recall@10, bge-base minus BM25:
   by 7.3 points of section recall@10. The results by type are description, not tests.
 - The spread of the per-question differences is 0.388, so the smallest difference this
   sample detects at power 0.8 is 0.075.
-- bge-base is behind at every cutoff and on every type. The one exception is that it
-  ranks the first cited section of a table question slightly higher (MRR 0.773 against
-  0.754).
+- bge-base is behind at every cutoff and on every type, with two exceptions on table
+  questions, where it ranks the first cited section slightly higher: MRR 0.773 against
+  0.754, and nDCG@10 0.682 against 0.675.
+- The prediction by type failed as well: table questions lost least (−0.046) and
+  lookup questions most (−0.082), though results by type are description only.
 - **Latency per question:** median 0.278 s and 95th percentile 0.393 s for bge-base,
   embedding the question on the GPU included, against 0.050 s and 0.112 s for BM25.
 
 ## 5. Flips
 
-15 questions improved and 38 regressed; the comparison record lists them.
+15 questions improved and 38 regressed; the comparison record lists them. The last three
+columns sort each question by its first match, in this order: a section number of Parts
+171 to 180 (the regular expression `\b1(?:7[1-9]|80)\.\d+`), then a UN or NA
+identification number (`\b(?:UN|NA)\s?\d{4}\b`), else neither. They are computed from
+`eval/dev/items.jsonl` and the comparison record.
 
 | Questions | All | lookup | multi_passage | table | A section number in the question | A UN or NA number | Neither |
 |---|---:|---:|---:|---:|---:|---:|---:|
 | Improved | 15 | 7 | 5 | 3 | 11 | 2 | 2 |
-| Regressed | 38 | 17 | 16 | 5 | 16 | 4 | 18 |
-| All answerable | 214 | 122 | 49 | 43 | 122 | 16 | 76 |
+| Regressed | 38 | 17 | 16 | 5 | 17 | 4 | 17 |
+| All answerable | 214 | 122 | 49 | 43 | 130 | 16 | 68 |
 
 - **Multi-passage questions regress most.** They are 23% of the answerable questions but
   42% of the regressions: bge-base finds fewer of the several sections the regulator
   cited.
-- **Questions without an explicit number regress more often** (47% of the regressions
-  against 36% of all questions). BM25's advantage is not only exact section numbers: the
-  requesters write in the regulation's own terms, and BM25 matches them.
+- **Questions without an explicit number regress more often:** 45% of the regressions
+  against 32% of all questions. So BM25's advantage is not only exact section numbers.
+  One explanation, not tested here, is that the requesters write in the regulation's
+  own terms, which BM25 matches word for word.
 - **In 4 regressions the cited section left the top 50 entirely,** and in many others it
   fell from BM25's ranks 1 to 3 to ranks 11 to 48.
 
@@ -137,10 +147,11 @@ Four of the sharpest regressions, read in full, show three failure patterns:
   specifications with nearly the same wording. For a question about retrofitting
   DOT-111 tank cars (18-0036-Q1), it ranked the DOT-117 specification, §179.202-13,
   above the retrofit rule the regulator cited, §174.310.
-- **The topic drifts to the salient subject.** Asked whether drivers need a hazmat
-  endorsement to carry lithium batteries (22-0086-Q1), bge-base ranked the
-  lithium-battery provisions first, and the driver's licence rule the regulator cited,
-  §177.816, fell from rank 1 to rank 25.
+- **The topic drifts away from the asked obligation.** Asked whether drivers need a
+  hazmat endorsement to carry lithium batteries (22-0086-Q1), bge-base ranked a passage
+  of §171.12, on North American shipments, first, and two special provisions next, on
+  battery-powered vehicles and on lithium batteries. The driver's licence rule the
+  regulator cited, §177.816, fell from rank 1 to rank 25.
 - **An exact identifier is blurred.** A question naming § 173.403 and the term "CSI"
   (18-0004-Q1) sent BM25 to that definition at rank 1. bge-base ranked the neighbouring
   fissile-transport section first and the definition 18th.
@@ -151,7 +162,7 @@ The other 34 regressions were classified by the table above, not read one by one
 
 - **One model, one setting.** The result concerns bge-base with its card's instruction
   and 512 tokens, not dense retrieval in general. The studies that found large dense
-  gains used larger models; E2 and E3 test two of them on the same questions.
+  gains used larger models; E2 and E3 test two larger models on the same questions.
 - **The questions are written by professionals.** Requesters often quote the
   regulation's terms and section numbers, which favours keyword matching. This is the
   distribution the system will serve, not a bias of the measurement, but it limits how
@@ -174,11 +185,15 @@ p = 0.0062), so BM25 remains the baseline. Configurations tried in phase 3 so fa
 ## 8. Reproduction
 
 From the repository root, with the database running and `DATABASE_URL` set as in
-`.env.example`:
+`.env.example`, and the corpus fetched and parsed as the README's quickstart shows. The
+first command builds the passage index, and does nothing when the index already holds
+the corpus; `--download` fetches the model's weights, about 440 MB, when they are not
+cached.
 
 ```
+uv run --env-file .env python -m regulator_graded_rag.index
 uv sync --group models
-uv run --group models --env-file .env python -m regulator_graded_rag.embed --config eval/configs/dense-bge-base.toml
+uv run --group models --env-file .env python -m regulator_graded_rag.embed --config eval/configs/dense-bge-base.toml --download
 uv run --group models --env-file .env python -m regulator_graded_rag.run --split dev --config eval/configs/dense-bge-base.toml
 uv run python -m regulator_graded_rag.compare 2026-11-24-bm25-dev-1 2026-11-25-dense-bge-base-dev-1
 ```
