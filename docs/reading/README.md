@@ -15,4 +15,4 @@ checked against the original publication: its title, authors, year and link.
 | [Generation](generation.md) | Writing answers from retrieved passages, running models locally, and making answers checkable. | 18 |
 | [Evaluation](evaluation.md) | Gold questions, metrics, significance tests, the held-out split and failure analysis. | 29 |
 | [Security](security.md) | Prompt injection, corpus poisoning, model files that run code, and the local review page. | 10 |
-| [Engineering practice](engineering-practice.md) | Recording decisions, tests, CI, dependencies and personal data in the history. | 15 |
+| [Engineering practice](engineering-practice.md) | Recording decisions, experiment configs, tests, CI, dependencies and personal data in the history. | 17 |

@@ -2,12 +2,17 @@
 
 # Engineering practice
 
-Recording decisions, tests, CI, dependencies and personal data in the history. Part of the [reading list](README.md).
+Recording decisions, experiment configs, tests, CI, dependencies and personal data in the history. Part of the [reading list](README.md).
 
 ## Recording decisions
 
 - ★ Michael Nygard, [Documenting Architecture Decisions](https://www.cognitect.com/blog/2011/11/15/documenting-architecture-decisions) (Cognitect, 2011). The original ADR format: a title, context, decision, status and consequences, with a reversed decision kept and marked superseded.
 - Georg Buchgeher et al., [Using Architecture Decision Records in Open Source Projects—An MSR Study on GitHub](https://doi.org/10.1109/ACCESS.2023.3287654) (IEEE Access, 2023). ADR adoption on GitHub is low but rising, about half of the repositories with ADRs hold only one to five, and most follow Nygard's template.
+
+## Experiment configs
+
+- Jimmy Lin, Xueguang Ma, Sheng-Chieh Lin, Jheng-Hong Yang, Ronak Pradeep and Rodrigo Nogueira, [Pyserini: An Easy-to-Use Python Toolkit to Support Replicable IR Research with Sparse and Dense Representations](https://arxiv.org/abs/2102.10073) (arXiv, 2021). Sparse, dense and hybrid retrieval baselines, kept replicable by shared norms and automated testing. The model for the test that checks the BM25 config reproduces the committed baseline.
+- D. Sculley, Gary Holt, Daniel Golovin, Eugene Davydov, Todd Phillips, Dietmar Ebner, Vinay Chaudhary, Michael Young, Jean-François Crespo and Dan Dennison, [Hidden Technical Debt in Machine Learning Systems](https://proceedings.neurips.cc/paper_files/paper/2015/hash/86df7dcfd896fcaf2674f757a2463eba-Abstract.html) (NIPS, 2015). The ML-specific risk factors behind ongoing maintenance costs, configuration issues among them. The older classic on configuration as technical debt, listed next to Lin et al.
 
 ## Tests, CI and dependencies
 
