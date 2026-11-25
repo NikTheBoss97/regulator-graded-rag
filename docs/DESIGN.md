@@ -544,3 +544,4 @@ Each is made when its phase starts, with options and an ADR:
 - [ADR-0020: The sample size as a sensitivity table](adr/0020-sample-size-as-a-sensitivity-table.md)
 - [ADR-0021: Which letter questions become items](adr/0021-which-letter-questions-become-items.md)
 - [ADR-0022: Code checks and an audit for the gold items](adr/0022-code-checks-and-an-audit-for-gold-items.md)
+- [ADR-0024: Paired comparisons, cross-validated tuning and adoption](adr/0024-paired-comparisons-cross-validated-tuning-and-adoption.md)
