@@ -6,7 +6,8 @@ settings() and search(question, k)), so the run command and phase 4 call it like
 Each stage keeps its top DEPTH passages per question, and its output goes through the
 stage cache under a key made of:
 - the stage's kind and settings;
-- the identity of the data it reads, such as when BM25's index was built;
+- the identity of the data it reads, such as when BM25's index was built or which
+  vectors a dense stage loaded;
 - the corpus version;
 - the code: the package's Python files, which also hold the depth, and the locked
   library versions in uv.lock.
@@ -14,7 +15,8 @@ A key never outlives the code or the data that filled it. The gold set is not pa
 key, since a stage sees only the question's text, which keys each entry. Each entry keeps
 the seconds its stage took, and compute_seconds() reports them for the last search, so a
 run answered from the cache still records what each answer cost. This version runs a
-single BM25 stage; the dense, fusion and rerank stages come with their experiments.
+single first stage, BM25 or dense, and settings() names a dense stage's vectors by their
+SHA-256; fusion and reranking come with their experiments.
 """
 
 import hashlib
@@ -27,6 +29,8 @@ from typing import Protocol
 from regulator_graded_rag.bm25 import BM25, Conn, Hit
 from regulator_graded_rag.cache import Entry, StageCache, source_digest, stage_key
 from regulator_graded_rag.configs import Bm25Stage, Config, ConfigError
+from regulator_graded_rag.dense import Dense
+from regulator_graded_rag.embeddings import Encoder, model_key
 from regulator_graded_rag.index import SCHEMA
 from regulator_graded_rag.metrics import DEPTH
 
@@ -68,24 +72,40 @@ class Pipeline:
         self._cache = cache
         self._clock = clock
         self._seconds = 0.0
+        identities = [dict(stage.identity()) for stage in first]
         self._first = [
             (
                 stage_key(
                     {
                         "stage": type(settings).__name__,
                         "settings": asdict(settings),
-                        "data": dict(stage.identity()),
+                        "data": identity,
                         "corpus_version": corpus_version,
                         "code": code,
                     }
                 ),
                 stage,
             )
-            for settings, stage in zip(config.first, first, strict=True)
+            for settings, stage, identity in zip(
+                config.first, first, identities, strict=True
+            )
+        ]
+        self._vectors = [
+            str(identity["vectors_sha256"])
+            for identity in identities
+            if "vectors_sha256" in identity
         ]
 
     def settings(self) -> dict[str, str | float]:
-        return {"config_file": self._config.path, "config_sha256": self._config.sha256}
+        """The config by path and SHA-256, and a dense stage's vectors by SHA-256, so a
+        run record names the exact embeddings it searched."""
+        found: dict[str, str | float] = {
+            "config_file": self._config.path,
+            "config_sha256": self._config.sha256,
+        }
+        if self._vectors:
+            found["vectors_sha256"] = ",".join(self._vectors)
+        return found
 
     def _cached(self, key: str, stage: Stage, question: str) -> Entry:
         entry = self._cache.get(key, question)
@@ -118,22 +138,39 @@ def build(
     corpus_version: str,
     cache: StageCache,
     schema: str = SCHEMA,
+    encoders: Mapping[str, Encoder] | None = None,
 ) -> Pipeline:
-    """The pipeline for a fixed config, refused with ConfigError for a grid or for a
-    stage this version cannot run."""
+    """The pipeline for a fixed config, with each dense stage's encoder found by
+    model_key(model, revision); refused with ConfigError for a grid, a missing encoder,
+    or stages this version cannot run."""
     if config.tuned is not None:
         raise ConfigError(
             f"{config.path} tunes {config.tuned}: build a pipeline for one of its values"
         )
+    if config.fusion or config.rerank:
+        raise ConfigError(f"{config.path}: this pipeline runs a single first stage")
     stage = config.first[0]
-    if config.fusion or config.rerank or not isinstance(stage, Bm25Stage):
-        raise ConfigError(f"{config.path}: this pipeline runs a single bm25 stage")
-    bm25 = BM25(
-        conn, corpus_version=corpus_version, k1=stage.k1, b=stage.b, schema=schema
-    )
+    first: Stage
+    if isinstance(stage, Bm25Stage):
+        first = BM25(
+            conn, corpus_version=corpus_version, k1=stage.k1, b=stage.b, schema=schema
+        )
+    else:
+        encoder = (encoders or {}).get(model_key(stage.model, stage.revision))
+        if encoder is None:
+            raise ConfigError(
+                f"{config.path}: no encoder for {stage.model} at {stage.revision}"
+            )
+        first = Dense(
+            conn,
+            stage=stage,
+            corpus_version=corpus_version,
+            encoder=encoder,
+            index_schema=schema,
+        )
     return Pipeline(
         config,
-        [bm25],
+        [first],
         corpus_version=corpus_version,
         cache=cache,
         code=code_digest(),

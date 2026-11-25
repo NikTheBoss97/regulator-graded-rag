@@ -64,6 +64,10 @@ class Encoder(Protocol):
 
     def passages(self, texts: Sequence[str]) -> list[list[float]]: ...
 
+    def too_long(self, texts: Sequence[str]) -> int:
+        """How many texts hold more tokens than the model reads."""
+        ...
+
 
 def model_key(model: str, revision: str) -> str:
     """A model at a revision as a table name: lowercase, every other character an
@@ -215,6 +219,23 @@ def load_vectors(
             ).format(s=s),
             (key, model, revision, corpus_version, passages, dim, header["sha256"]),
         )
+
+
+def vectors_meta(
+    conn: Conn, key: str, schema: str = VECTORS
+) -> tuple[str, int, str] | None:
+    """The corpus version, dimension and SHA-256 of the model's loaded vectors; None
+    when none are loaded."""
+    found = conn.execute("SELECT to_regclass(%s)", (f"{schema}.meta",)).fetchone()
+    if found is None or found[0] is None:
+        return None
+    row = conn.execute(
+        sql.SQL(
+            "SELECT corpus_version, dim, sha256 FROM {s}.meta WHERE model_key = %s"
+        ).format(s=sql.Identifier(schema)),
+        (key,),
+    ).fetchone()
+    return None if row is None else (str(row[0]), int(row[1]), str(row[2]))
 
 
 def nearest(
