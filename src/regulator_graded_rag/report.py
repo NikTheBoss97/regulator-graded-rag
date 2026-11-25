@@ -57,7 +57,13 @@ def _row(run: Mapping[str, Any]) -> str:
         numbers = [recall["10"], recall["5"], recall["20"], recall["50"]]
         numbers += [overall["mrr"], overall["ndcg10"]]
         scores = [f"{x:.3f}" for x in numbers]
-    settings = ", ".join(f"{key}={value}" for key, value in run["settings"].items())
+    if "config" in run:
+        # A config run's settings are its file's path and checksums; the committed
+        # file holds every setting (ADR-0023).
+        path = run["config"]["path"]
+        settings = f"[{Path(path).name}]({path})"
+    else:
+        settings = ", ".join(f"{key}={value}" for key, value in run["settings"].items())
     link = f"[{run['name']}]({RUNS.as_posix()}/{run['name']}/)"
     median = f"{run['seconds']['median']:.3f}"
     return "| " + " | ".join([link, run["retriever"], settings, *scores, median]) + " |"
