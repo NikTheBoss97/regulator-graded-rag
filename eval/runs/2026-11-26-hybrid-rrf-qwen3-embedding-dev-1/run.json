@@ -1,0 +1,67 @@
+{
+  "config": {
+    "path": "eval/configs/hybrid-rrf-qwen3-embedding.toml",
+    "sha256": "e81a4776af57d4be0e515f8dceeb9005ad23e9149735de7f0a4c06e47d227b28",
+    "text": "# Author: Nicola Antonello\n# E4: BM25 and Qwen3-Embedding-0.6B fused by reciprocal rank fusion, its constant k chosen\n# by 5-fold cross-validation on dev from the grid ADR-0024 fixed before any run. No dense\n# model was adopted, so the dense stage is the one with the highest dev recall@10, as E3\n# ran it. A config that produced a committed run is never edited (ADR-0023).\nname = \"hybrid-rrf-qwen3-embedding\"\n\n[[first_stage]]\nkind = \"bm25\"\nk1 = 1.2\nb = 0.75\n\n[[first_stage]]\nkind = \"dense\"\nmodel = \"Qwen/Qwen3-Embedding-0.6B\"\nrevision = \"97b0c614be4d77ee51c0cef4e5f07c00f9eb65b3\"\nweights_sha256 = \"0437e45c94563b09e13cb7a64478fc406947a93cb34a7e05870fc8dcd48e23fd\"\nquery_prompt = \"Instruct: Given a web search query, retrieve relevant passages that answer the query\\nQuery:\"\nmax_length = 8192\ndtype = \"float32\"\n\n[fusion]\nmethod = \"rrf\"\nk = [10, 30, 60, 100]\n\n[cv]\nfolds = 5\nseed = \"phase-3-folds-2026-11-25\"\n"
+  },
+  "corpus_version": "ecaac596422344e6b548dcd8a1816261a27d398d0d707077def27a5976db34ef",
+  "cost_usd": 0.0,
+  "finished": "2026-11-26T16:27:53+00:00",
+  "git": {
+    "commit": "c3b844ea2f63c1c71bf2f26509c9a0a55a11326e",
+    "dirty": false,
+    "tree": "67ea0e56dcbe7f568f38f9d6e03e70ef7fba1fcc"
+  },
+  "gold": {
+    "answerable": 214,
+    "items": 250,
+    "path": "eval/dev/items.jsonl",
+    "version": "7bfdfdf9990f31769dda403ece213e9ccfeafd56a3dae434e12eb54d86bad3bb"
+  },
+  "heldout_runs": 0,
+  "machine": {
+    "platform": "Windows-11-10.0.26300-SP0",
+    "processor": "Intel64 Family 6 Model 183 Stepping 1, GenuineIntel",
+    "python": "3.14.7"
+  },
+  "questions": 250,
+  "retriever": "hybrid-rrf-qwen3-embedding",
+  "seconds": {
+    "median": 0.13969045000703773,
+    "p95": 0.23624429499250255,
+    "total": 37.661032900214195
+  },
+  "settings": {
+    "config_file": "eval/configs/hybrid-rrf-qwen3-embedding.toml",
+    "config_sha256": "e81a4776af57d4be0e515f8dceeb9005ad23e9149735de7f0a4c06e47d227b28",
+    "cuda": "12.6",
+    "dtype": "float32",
+    "gpu": "NVIDIA GeForce RTX 4070 Laptop GPU",
+    "torch": "2.14.1+cu126",
+    "truncated": 0,
+    "vectors_sha256": "d15a9078ec8fc247ac72f005025347d25a240df8e08d089acebba08d49cc1ca8"
+  },
+  "spent_usd": 0.0,
+  "split": "dev",
+  "stage": "retrieval",
+  "started": "2026-11-26T16:27:15+00:00",
+  "status": "complete",
+  "tuning": {
+    "all_dev": 60.0,
+    "folds": {
+      "0": 60.0,
+      "1": 10.0,
+      "2": 10.0,
+      "3": 10.0,
+      "4": 60.0
+    },
+    "grid": [
+      10.0,
+      30.0,
+      60.0,
+      100.0
+    ],
+    "seed": "phase-3-folds-2026-11-25",
+    "setting": "k"
+  }
+}

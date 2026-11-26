@@ -55,6 +55,7 @@ compliance or legal advice.
 | [2026-11-26-dense-bge-base-dev-1](eval/runs/2026-11-26-dense-bge-base-dev-1/) | dense-bge-base | [dense-bge-base.toml](eval/configs/dense-bge-base.toml) | 0.618 | 0.552 | 0.725 | 0.821 | 0.541 | 0.520 | 0.103 |
 | [2026-11-26-dense-gte-modernbert-dev-1](eval/runs/2026-11-26-dense-gte-modernbert-dev-1/) | dense-gte-modernbert | [dense-gte-modernbert.toml](eval/configs/dense-gte-modernbert.toml) | 0.612 | 0.567 | 0.680 | 0.775 | 0.555 | 0.525 | 0.084 |
 | [2026-11-26-dense-qwen3-embedding-dev-1](eval/runs/2026-11-26-dense-qwen3-embedding-dev-1/) | dense-qwen3-embedding | [dense-qwen3-embedding.toml](eval/configs/dense-qwen3-embedding.toml) | 0.626 | 0.534 | 0.727 | 0.791 | 0.528 | 0.511 | 0.095 |
+| [2026-11-26-hybrid-rrf-qwen3-embedding-dev-1](eval/runs/2026-11-26-hybrid-rrf-qwen3-embedding-dev-1/) | hybrid-rrf-qwen3-embedding | [hybrid-rrf-qwen3-embedding.toml](eval/configs/hybrid-rrf-qwen3-embedding.toml) | 0.697 | 0.610 | 0.788 | 0.854 | 0.580 | 0.566 | 0.140 |
 <!-- results:end -->
 
 `uv run python -m regulator_graded_rag.report` writes this table from the committed run
