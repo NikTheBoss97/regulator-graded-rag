@@ -112,6 +112,10 @@ candidates:
     loaded before these were recorded.
   - The run record names, besides the vectors' SHA-256, their dtype, the count of
     passages cut to the input length, the GPU, and torch's and CUDA's versions.
+- 2026-11-26: The encoder compares the precision the model loaded in with its config's
+  and refuses a mismatch, so the record's dtype is the one the model ran in, not only
+  the one asked for. The record names the device by its name for a CUDA GPU and by its
+  type otherwise, such as "mps" for Apple's GPU.
 
 ## References
 
