@@ -61,6 +61,17 @@ def test_choose_never_uses_the_folds_own_questions() -> None:
     assert all_dev == 60.0
 
 
+def test_the_all_dev_value_is_chosen_on_every_item() -> None:
+    # Here fold 1's value, chosen on fold 0's questions, differs from the value that is
+    # best on all of them, which phase 4 uses.
+    fold_of = {"a": 0, "b": 0, "c": 1, "d": 1}
+    scores = {
+        10.0: {"a": 0.6, "b": 0.6, "c": 0.0, "d": 0.0},
+        60.0: {"a": 0.5, "b": 0.5, "c": 1.0, "d": 1.0},
+    }
+    assert choose(scores, fold_of, 2) == ({0: 60.0, 1: 10.0}, 60.0)
+
+
 def test_choose_breaks_ties_by_grid_order() -> None:
     fold_of = {"a": 0, "b": 1}
     scores = {60.0: {"a": 0.5, "b": 0.5}, 10.0: {"a": 0.5, "b": 0.5}}
