@@ -26,6 +26,9 @@ LETTER_CHECKS = {
     "2026-11-24-bm25-dev-1--2026-11-26-dense-qwen3-embedding-dev-1": (
         "0003-dense-qwen3-embedding-against-bm25.md"
     ),
+    "2026-11-24-bm25-dev-1--2026-11-26-hybrid-rrf-qwen3-embedding-dev-1": (
+        "0004-hybrid-rrf-qwen3-embedding-against-bm25.md"
+    ),
 }
 
 
