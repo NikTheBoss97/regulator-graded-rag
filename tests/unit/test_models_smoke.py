@@ -1,6 +1,7 @@
 # Author: Nicola Antonello
 import math
 import os
+from dataclasses import replace
 
 import pytest
 
@@ -13,23 +14,31 @@ BGE = DenseStage(
     "Represent this sentence for searching relevant passages: ",
     512,
 )
+# Stored in 16 bits, unlike bge-base, so it shows whether the config's dtype is used.
+GTE = DenseStage(
+    "Alibaba-NLP/gte-modernbert-base",
+    "e7f32e3c00f91d699e8c43b53106206bcc72bb22",
+    "3e85899d5728cb7de79781c0c3acfb91ccef9f875f1f7e0b3c9f3dd4b6a724ba",
+    "",
+    8192,
+)
 
 
-def cached_bge() -> None:
-    """Skip unless asked for with RGR_MODEL_SMOKE=1, since loading the model takes about
-    a minute, and unless the models group is installed and bge-base's weights are
-    already cached: this test never downloads, so the gates stay offline."""
+def cached(stage: DenseStage) -> None:
+    """Skip unless asked for with RGR_MODEL_SMOKE=1, since loading a model takes about a
+    minute, and unless the models group is installed and the stage's weights are
+    already cached: these tests never download, so the gates stay offline."""
     if os.environ.get("RGR_MODEL_SMOKE") != "1":
         pytest.skip("set RGR_MODEL_SMOKE=1 to run the real model")
     pytest.importorskip("sentence_transformers")
     from regulator_graded_rag.models import cached_file
 
-    if cached_file(BGE.model, BGE.revision, "model.safetensors") is None:
-        pytest.skip("bge-base's weights are not in the Hugging Face cache")
+    if cached_file(stage.model, stage.revision, "model.safetensors") is None:
+        pytest.skip(f"{stage.model}'s weights are not in the Hugging Face cache")
 
 
 def test_models_smoke() -> None:
-    cached_bge()
+    cached(BGE)
     from regulator_graded_rag.models import SentenceTransformerEncoder
 
     encoder = SentenceTransformerEncoder(BGE, offline=True)
@@ -57,8 +66,19 @@ def test_models_smoke() -> None:
     assert runtime["torch"].startswith("2.14.1") and runtime["gpu"]
 
 
+def test_a_16_bit_model_loads_in_the_precision_its_config_states() -> None:
+    cached(GTE)
+    from regulator_graded_rag.models import SentenceTransformerEncoder
+
+    # The encoder refuses a model that did not load in the config's dtype, so building
+    # it is the check; the dtype is read as well, in case that refusal is ever lost.
+    for dtype in ("float32", "float16"):
+        encoder = SentenceTransformerEncoder(replace(GTE, dtype=dtype), offline=True)
+        assert str(encoder._model.dtype) == f"torch.{dtype}"
+
+
 def test_cached_weights_with_another_checksum_are_refused() -> None:
-    cached_bge()
+    cached(BGE)
     from regulator_graded_rag.models import WeightsMismatch, verified_file
 
     with pytest.raises(WeightsMismatch, match="not the pinned"):

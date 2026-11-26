@@ -2,6 +2,7 @@
 import hashlib
 import sys
 import types
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -18,10 +19,15 @@ PINNED = hashlib.sha256(WEIGHTS).hexdigest()
 
 
 def stub_libraries(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, *, cached: bool = True
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    *,
+    cached: bool = True,
+    loaded: str = "torch.float32",
 ) -> list[tuple[object, ...]]:
     """Stand-ins for huggingface_hub and sentence_transformers that record each call,
-    so the loader's arguments are checked without the models group."""
+    so the loader's arguments are checked without the models group. The model reports
+    the precision it loaded in as `loaded`, as torch names it."""
     calls: list[tuple[object, ...]] = []
     path = tmp_path / "model.safetensors"
     path.write_bytes(WEIGHTS)
@@ -41,6 +47,7 @@ def stub_libraries(
         def __init__(self, name: str, **kwargs: object) -> None:
             calls.append(("load", name, kwargs))
             self.max_seq_length = 0
+            self.dtype = loaded
 
         def get_embedding_dimension(self) -> int:
             return 3
@@ -80,6 +87,19 @@ def test_the_encoder_loads_only_verified_safetensors_without_remote_code(
             },
         ),
     ]
+
+
+def test_a_model_loaded_at_another_precision_is_refused(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    # A library that ignored the requested dtype would run the model in its stored 16
+    # bits while the run record says float32, so the loaded precision is checked.
+    stub_libraries(monkeypatch, tmp_path, loaded="torch.float16")
+    with pytest.raises(WeightsMismatch, match="loaded in float16, not the config's"):
+        SentenceTransformerEncoder(stage(PINNED))
+    # A model asked for in 16 bits and loaded in them is the config's.
+    stub_libraries(monkeypatch, tmp_path, loaded="torch.bfloat16")
+    SentenceTransformerEncoder(replace(stage(PINNED), dtype="bfloat16"))
 
 
 def test_weights_with_another_checksum_are_never_loaded(

@@ -17,7 +17,8 @@ from regulator_graded_rag.configs import DenseStage
 
 
 class WeightsMismatch(RuntimeError):
-    """A weights file that is not the one the config pins."""
+    """Weights that are not the ones the config pins: another file, or a model loaded at
+    another precision."""
 
 
 class WeightsMissing(RuntimeError):
@@ -67,8 +68,8 @@ def cached_file(repo: str, revision: str, filename: str) -> Path | None:
 
 class SentenceTransformerEncoder:
     """A dense stage's model through sentence-transformers, in the precision its config
-    states. Vectors come back L2-normalized; texts longer than the stage's max_length
-    are cut to it."""
+    states, which is checked once the model is loaded. Vectors come back L2-normalized;
+    texts longer than the stage's max_length are cut to it."""
 
     def __init__(self, stage: DenseStage, *, offline: bool = True) -> None:
         verified_file(
@@ -87,6 +88,13 @@ class SentenceTransformerEncoder:
             local_files_only=offline,
             model_kwargs={"use_safetensors": True, "dtype": stage.dtype},
         )
+        # The run record names the config's dtype, so a library that ignored it would
+        # leave a record that is wrong; torch names a dtype "torch.float32".
+        loaded = str(self._model.dtype).removeprefix("torch.")
+        if loaded != stage.dtype:
+            raise WeightsMismatch(
+                f"{stage.model} loaded in {loaded}, not the config's {stage.dtype}"
+            )
         self._model.max_seq_length = stage.max_length
         self.dim = int(self._model.get_embedding_dimension())
 
