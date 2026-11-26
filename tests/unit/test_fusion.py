@@ -49,18 +49,17 @@ BM25 = hits(("p1", 10.0), ("p2", 5.0), ("p4", 2.0))
 DENSE = hits(("p2", 0.9), ("p3", 0.5), ("p1", 0.1))
 
 
-def test_weighted_alpha_one_is_the_dense_order() -> None:
-    fused = ids(weighted(BM25, DENSE, 1.0))
-    # Only the dense scores count: the dense passages keep their order, and those it
-    # did not find score 0, as its lowest does.
-    assert [p for p in fused if p in ids(DENSE)] == ids(DENSE)
-    assert fused[:2] == ["p2", "p3"]
+def test_weighted_alpha_one_ranks_by_the_dense_scores() -> None:
+    # Only the dense scores count. Its lowest passage, p1, scores 0 as p4 does, which
+    # it did not find, and the tie keeps BM25's order: alpha 1 follows the dense order
+    # only above its minimum.
+    assert ids(weighted(BM25, DENSE, 1.0)) == ["p2", "p3", "p1", "p4"]
 
 
 def test_weighted_alpha_zero_is_the_bm25_order() -> None:
-    fused = ids(weighted(BM25, DENSE, 0.0))
-    assert [p for p in fused if p in ids(BM25)] == ids(BM25)
-    assert fused[:2] == ["p1", "p2"]
+    # BM25's lowest passage, p4, ties at 0 with p3, which only the dense list found,
+    # and the tie keeps BM25's order, so alpha 0 gives exactly BM25's ranking.
+    assert ids(weighted(BM25, DENSE, 0.0)) == ["p1", "p2", "p4", "p3"]
 
 
 def test_a_missing_passage_scores_zero_in_that_list() -> None:
