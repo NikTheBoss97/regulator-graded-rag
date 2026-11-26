@@ -9,8 +9,9 @@ import pytest
 
 from regulator_graded_rag.bm25 import Hit
 from regulator_graded_rag.cache import CACHE_ROOT
-from regulator_graded_rag.configs import load_config
+from regulator_graded_rag.configs import ConfigError, load_config
 from regulator_graded_rag.gold import Item, gold_version
+from regulator_graded_rag.metrics import DEPTH
 from regulator_graded_rag.runs import (
     ResumeMismatch,
     RunExists,
@@ -22,8 +23,10 @@ from regulator_graded_rag.runs import (
     run_config,
     run_name,
     run_retrieval,
+    run_tuned,
     score_run,
 )
+from regulator_graded_rag.tuning import assign_folds
 
 BASELINE = Path("eval/configs/bm25.toml")
 
@@ -464,3 +467,111 @@ def test_each_split_keeps_its_own_stage_cache() -> None:
     # Held-out hit lists stay apart from dev's, under a heldout/ path.
     assert cache_root("dev") == CACHE_ROOT / "dev"
     assert cache_root("heldout") == CACHE_ROOT / "heldout"
+
+
+TUNED = (
+    '[[first_stage]]\nkind = "bm25"\nk1 = 1.2\nb = 0.75\n'
+    '[[first_stage]]\nkind = "dense"\nmodel = "m"\nrevision = "r"\n'
+    f'weights_sha256 = "{"a" * 64}"\nquery_prompt = ""\nmax_length = 512\n'
+    '[fusion]\nmethod = "rrf"\nk = [10, 60]\n[cv]\nfolds = 2\nseed = "s"\n'
+)
+TUNED_ITEMS = [
+    *ITEMS,
+    item("U-1", "four", (), "unanswerable"),
+    item("U-2", "five", (), "unanswerable"),
+]
+
+
+class ByFold:
+    """A grid value's retriever that finds the cited section only for the given items;
+    elsewhere it returns a passage of its own, so a line shows which value wrote it."""
+
+    name = "tuned"
+
+    def __init__(self, finds: set[str], miss: str) -> None:
+        self.finds = finds
+        self.miss = miss
+
+    def settings(self) -> dict[str, str | float]:
+        return {"config_file": "tuned.toml"}
+
+    def search(self, question: str, k: int) -> list[Hit]:
+        found = next(i for i in TUNED_ITEMS if i.question == question)
+        if found.id in self.finds:
+            return [Hit(f"{found.evidence[0].split('(')[0]}:1", 1.0)]
+        return [Hit(self.miss, 1.0)]
+
+
+def tuned_config(tmp_path: Path) -> Path:
+    path = tmp_path / "tuned.toml"
+    path.write_text('name = "tuned"\n' + TUNED, encoding="utf-8", newline="\n")
+    return path
+
+
+def tuned_run(
+    tmp_path: Path,
+) -> tuple[dict[str, object], dict[float, ByFold], dict[str, int]]:
+    fold_of = assign_folds(TUNED_ITEMS, "s", 2)
+
+    def fold(n: int) -> set[str]:
+        return {i for i, f in fold_of.items() if f == n}
+
+    # Value 10 finds fold 1's sections and value 60 fold 0's, so each fold should get
+    # the value that is worse on its own questions.
+    retrievers = {10.0: ByFold(fold(1), "910.1:1"), 60.0: ByFold(fold(0), "960.1:1")}
+    config = load_config(tuned_config(tmp_path))
+    run = run_tuned(config, retrievers, TUNED_ITEMS, tmp_path / "r", HEAD)
+    return run, retrievers, fold_of
+
+
+def test_a_tuned_run_searches_unanswerable_items_with_their_folds_value(
+    tmp_path: Path,
+) -> None:
+    run, retrievers, fold_of = tuned_run(tmp_path)
+    tuning = run["tuning"]
+    assert isinstance(tuning, dict)
+    written = {line["id"]: line["hits"] for line in lines(tmp_path / "r")}
+    assert set(written) == {i.id for i in TUNED_ITEMS}
+    for found in TUNED_ITEMS:
+        value = tuning["folds"][str(fold_of[found.id])]
+        hits = retrievers[value].search(found.question, DEPTH)
+        assert written[found.id] == [[hit.passage_id, hit.score] for hit in hits]
+    # The two unanswerable items sit in different folds, which chose different values.
+    assert written["U-1"] != written["U-2"]
+
+
+def test_a_tuned_run_records_its_folds_and_final_value(tmp_path: Path) -> None:
+    run, _, _ = tuned_run(tmp_path)
+    expected = {
+        "setting": "k",
+        "grid": [10.0, 60.0],
+        "seed": "s",
+        "folds": {"0": 10.0, "1": 60.0},
+        "all_dev": 60.0,
+    }
+    assert run["tuning"] == expected
+    saved = json.loads((tmp_path / "r" / "run.json").read_text(encoding="utf-8"))
+    assert saved["tuning"] == expected and saved["status"] == "complete"
+
+
+def test_a_tuned_run_starts_again_rather_than_resume(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    runs = tmp_path / "runs"
+    (runs / "stopped").mkdir(parents=True)
+    (runs / "stopped" / "run.json").write_text("{}", encoding="utf-8")
+    argv = ["--split", "dev", "--config", str(tuned_config(tmp_path))]
+    assert main([*argv, "--resume", "stopped", "--runs", str(runs)]) == 1
+    assert "starts again" in capsys.readouterr().out
+
+
+def test_tuning_never_touches_the_held_out_split(tmp_path: Path) -> None:
+    # A tuned run on held-out items would choose its values on them (ADR-0014): the
+    # held-out run uses the config fixed at the value chosen on dev.
+    never = {10.0: ByFold(set(), "910.1:1"), 60.0: ByFold(set(), "960.1:1")}
+    config = load_config(tuned_config(tmp_path))
+    with pytest.raises(ConfigError, match="held-out"):
+        run_tuned(
+            config, never, TUNED_ITEMS, tmp_path / "r", {**HEAD, "split": "heldout"}
+        )
+    assert not (tmp_path / "r").exists()
