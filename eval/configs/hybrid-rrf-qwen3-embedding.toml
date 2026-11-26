@@ -1,0 +1,28 @@
+# Author: Nicola Antonello
+# E4: BM25 and Qwen3-Embedding-0.6B fused by reciprocal rank fusion, its constant k chosen
+# by 5-fold cross-validation on dev from the grid ADR-0024 fixed before any run. No dense
+# model was adopted, so the dense stage is the one with the highest dev recall@10, as E3
+# ran it. A config that produced a committed run is never edited (ADR-0023).
+name = "hybrid-rrf-qwen3-embedding"
+
+[[first_stage]]
+kind = "bm25"
+k1 = 1.2
+b = 0.75
+
+[[first_stage]]
+kind = "dense"
+model = "Qwen/Qwen3-Embedding-0.6B"
+revision = "97b0c614be4d77ee51c0cef4e5f07c00f9eb65b3"
+weights_sha256 = "0437e45c94563b09e13cb7a64478fc406947a93cb34a7e05870fc8dcd48e23fd"
+query_prompt = "Instruct: Given a web search query, retrieve relevant passages that answer the query\nQuery:"
+max_length = 8192
+dtype = "float32"
+
+[fusion]
+method = "rrf"
+k = [10, 30, 60, 100]
+
+[cv]
+folds = 5
+seed = "phase-3-folds-2026-11-25"
