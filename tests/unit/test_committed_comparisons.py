@@ -66,4 +66,7 @@ def test_the_reports_letter_level_checks_recompute(record: str, report: str) -> 
     a, b = (_recall_at_10(RUNS / data[side]) for side in ("a", "b"))
     ids = sorted(a)
     p = paired_p(letter_sums(ids, [b[i] - a[i] for i in ids]))
-    assert f"p = {p:.2g}" in (REPORTS / report).read_text(encoding="utf-8")
+    # In the bullet that names the check, since the per-question p may print the same.
+    text = (REPORTS / report).read_text(encoding="utf-8")
+    [bullet] = [part for part in text.split("\n- ") if "compare.letter_sums" in part]
+    assert f"p = {p:.2g}" in bullet
