@@ -114,6 +114,12 @@ The difference in section recall@10, the RRF hybrid minus BM25:
   interval.
 - As description, the hybrid lifts passages from ranks 11 to 20 into the top 20
   (recall@20 0.788 against 0.761), while recall@5 and recall@50 stay level.
+- **Each k, fixed for every question,** recomputed from the committed BM25 and E3 runs,
+  whose hits are this run's two stages: k = 10 scores 0.709, k = 30 0.706, and k = 60
+  and 100 both 0.711, alike on every question. None beats BM25 by a supported margin (p
+  from 0.33 to 0.46). Each scores above the cross-validated 0.697, because in every fold
+  the k chosen on the other four was the worse of 10 and 60 on the fold's own
+  questions: with values this close, the choice follows the noise.
 - **Latency per question:** median 0.140 s and 95th percentile 0.236 s for BM25,
   Qwen3-Embedding and the fusion together, against 0.050 s and 0.112 s for BM25 alone.
 
@@ -145,8 +151,11 @@ Seven regressions, read in full, show one failure pattern:
   BM25's 6th to 11th and §173.241 (18-0009-Q2) from 7th to 15th, both missing from the
   dense top 50, and §179.7 (20-0039-Q2) from 4th to 12th, which the dense model ranked
   33rd. With k = 10 the same happens where the dense ranking is lower than BM25's:
-  §173.301 (24-0042-Q2) went from 5th, and 10th in the dense list, to 13th, and §171.8
-  (18-0081-Q1 and Q3) from 9th and 7th to 14th and 11th.
+  §173.301 (24-0042-Q2) went from BM25's 5th to 13th, and §171.8 (18-0081-Q1 and Q3)
+  from 9th and 7th to 14th and 11th. In these three, and for §179.7, the two rankings
+  found different passages of the cited section: BM25 ranked §173.301's passage 18
+  fifth, and the dense list its passage 27 tenth. RRF fuses passages, so the section's
+  two votes never add; fusing by section might keep it.
 
 The other 7 regressions were classified by the table above, not read one by one.
 
@@ -196,6 +205,12 @@ uv run python -m regulator_graded_rag.compare 2026-11-24-bm25-dev-1 2026-11-26-h
 A rerun writes a new run folder and deals the same folds from the same seed. The
 comparison record recomputes byte for byte from the two committed runs, which a unit test
 checks.
+
+## Amendments
+
+- 2026-11-26: Of Bruch et al., only the abstract was read. Section 2's note on
+  *read-part*, written before the run, also names the sections reporting the results,
+  which holds for Chae et al. alone.
 
 ## References
 
