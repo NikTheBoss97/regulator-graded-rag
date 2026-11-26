@@ -104,6 +104,8 @@ The difference in section recall@10, gte-modernbert minus BM25:
   gte-modernbert, embedding the question on the GPU included, against 0.050 s and
   0.112 s for BM25. Other commands slowed parts of this run, so its 95th percentile
   overstates it; section 6 gives the details, and why E1's 0.278 s is not compared.
+  Measured again on an idle laptop, the times are 0.084 s and 0.132 s, and bge-base's
+  0.103 s and 0.118 s (see the amendment of 2026-11-26).
 
 ## 5. Flips
 
@@ -187,7 +189,8 @@ The other 41 regressions were classified by the table above, not read one by one
   than its median does. E1's times are uniformly higher than this run's, its fastest
   question 0.178 s against 0.064 s here, although a question takes the same two steps
   in both: one encoding and one exact search over 768-dimension vectors. So E1's times
-  are not compared with this run's.
+  are not compared with this run's. The amendment of 2026-11-26 gives both models'
+  times measured again on an idle laptop.
 - **Machine-dependent numerics.** The vectors were computed once on one GPU; another
   machine may round differently and swap near-tied passages, which is why the vectors'
   SHA-256 is recorded and published runs come from one machine.
@@ -218,6 +221,18 @@ uv run python -m regulator_graded_rag.compare 2026-11-24-bm25-dev-1 2026-11-25-d
 
 A rerun writes a new run folder. The comparison record recomputes byte for byte from the
 two committed runs, which a unit test checks.
+
+## Amendments
+
+- 2026-11-26: E2's and E1's latency were measured again on an idle laptop, one run
+  after the other, at commit `2fb685e` (tree `7abbb2f8`), with no uncommitted changes
+  to tracked files. gte-modernbert, in run `2026-11-26-dense-gte-modernbert-dev-1`,
+  takes a median of 0.084 s and a 95th percentile of 0.132 s per question; bge-base, in
+  run `2026-11-26-dense-bge-base-dev-1`, takes 0.103 s and 0.118 s. Both re-runs
+  returned the same 50 passages, with the same scores, for all 250 questions as their
+  first runs, so only the times changed. These two now compare with each other. E3's
+  median, 0.095 s, timed on the idle laptop earlier that day at commit `72b6f90`, lies
+  between theirs.
 
 ## References
 

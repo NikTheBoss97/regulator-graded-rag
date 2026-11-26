@@ -52,6 +52,8 @@ compliance or legal advice.
 | [2026-11-24-bm25-dev-1](eval/runs/2026-11-24-bm25-dev-1/) | bm25 | b=0.75, config=english, k1=1.2, variant=lucene | 0.691 | 0.610 | 0.761 | 0.856 | 0.575 | 0.558 | 0.050 |
 | [2026-11-25-dense-bge-base-dev-1](eval/runs/2026-11-25-dense-bge-base-dev-1/) | dense-bge-base | [dense-bge-base.toml](eval/configs/dense-bge-base.toml) | 0.618 | 0.552 | 0.725 | 0.821 | 0.541 | 0.520 | 0.278 |
 | [2026-11-25-dense-gte-modernbert-dev-1](eval/runs/2026-11-25-dense-gte-modernbert-dev-1/) | dense-gte-modernbert | [dense-gte-modernbert.toml](eval/configs/dense-gte-modernbert.toml) | 0.612 | 0.567 | 0.680 | 0.775 | 0.555 | 0.525 | 0.102 |
+| [2026-11-26-dense-bge-base-dev-1](eval/runs/2026-11-26-dense-bge-base-dev-1/) | dense-bge-base | [dense-bge-base.toml](eval/configs/dense-bge-base.toml) | 0.618 | 0.552 | 0.725 | 0.821 | 0.541 | 0.520 | 0.103 |
+| [2026-11-26-dense-gte-modernbert-dev-1](eval/runs/2026-11-26-dense-gte-modernbert-dev-1/) | dense-gte-modernbert | [dense-gte-modernbert.toml](eval/configs/dense-gte-modernbert.toml) | 0.612 | 0.567 | 0.680 | 0.775 | 0.555 | 0.525 | 0.084 |
 | [2026-11-26-dense-qwen3-embedding-dev-1](eval/runs/2026-11-26-dense-qwen3-embedding-dev-1/) | dense-qwen3-embedding | [dense-qwen3-embedding.toml](eval/configs/dense-qwen3-embedding.toml) | 0.626 | 0.534 | 0.727 | 0.791 | 0.528 | 0.511 | 0.095 |
 <!-- results:end -->
 
