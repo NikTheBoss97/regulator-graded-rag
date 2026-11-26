@@ -1,0 +1,74 @@
+{
+  "config": {
+    "path": "eval/configs/hybrid-weighted-qwen3-embedding.toml",
+    "sha256": "a4e055d473ae58d8257316f33cb971ee6ac0c36d9e73d5ea4bb7a1ad71469385",
+    "text": "# Author: Nicola Antonello\n# E5: BM25 and Qwen3-Embedding-0.6B fused by a weighted sum, alpha times the dense score\n# plus 1 - alpha times BM25's, each min-max normalized over its own top 50, with alpha\n# chosen by 5-fold cross-validation on dev from the grid ADR-0024 fixed before any run.\n# The stages are E4's. A config that produced a committed run is never edited (ADR-0023).\nname = \"hybrid-weighted-qwen3-embedding\"\n\n[[first_stage]]\nkind = \"bm25\"\nk1 = 1.2\nb = 0.75\n\n[[first_stage]]\nkind = \"dense\"\nmodel = \"Qwen/Qwen3-Embedding-0.6B\"\nrevision = \"97b0c614be4d77ee51c0cef4e5f07c00f9eb65b3\"\nweights_sha256 = \"0437e45c94563b09e13cb7a64478fc406947a93cb34a7e05870fc8dcd48e23fd\"\nquery_prompt = \"Instruct: Given a web search query, retrieve relevant passages that answer the query\\nQuery:\"\nmax_length = 8192\ndtype = \"float32\"\n\n[fusion]\nmethod = \"weighted\"\nalpha = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]\n\n[cv]\nfolds = 5\nseed = \"phase-3-folds-2026-11-25\"\n"
+  },
+  "corpus_version": "ecaac596422344e6b548dcd8a1816261a27d398d0d707077def27a5976db34ef",
+  "cost_usd": 0.0,
+  "finished": "2026-11-26T16:28:08+00:00",
+  "git": {
+    "commit": "c3b844ea2f63c1c71bf2f26509c9a0a55a11326e",
+    "dirty": false,
+    "tree": "67ea0e56dcbe7f568f38f9d6e03e70ef7fba1fcc"
+  },
+  "gold": {
+    "answerable": 214,
+    "items": 250,
+    "path": "eval/dev/items.jsonl",
+    "version": "7bfdfdf9990f31769dda403ece213e9ccfeafd56a3dae434e12eb54d86bad3bb"
+  },
+  "heldout_runs": 0,
+  "machine": {
+    "platform": "Windows-11-10.0.26300-SP0",
+    "processor": "Intel64 Family 6 Model 183 Stepping 1, GenuineIntel",
+    "python": "3.14.7"
+  },
+  "questions": 250,
+  "retriever": "hybrid-weighted-qwen3-embedding",
+  "seconds": {
+    "median": 0.1397054500048398,
+    "p95": 0.2362438599942834,
+    "total": 37.66234570015513
+  },
+  "settings": {
+    "config_file": "eval/configs/hybrid-weighted-qwen3-embedding.toml",
+    "config_sha256": "a4e055d473ae58d8257316f33cb971ee6ac0c36d9e73d5ea4bb7a1ad71469385",
+    "cuda": "12.6",
+    "dtype": "float32",
+    "gpu": "NVIDIA GeForce RTX 4070 Laptop GPU",
+    "torch": "2.14.1+cu126",
+    "truncated": 0,
+    "vectors_sha256": "d15a9078ec8fc247ac72f005025347d25a240df8e08d089acebba08d49cc1ca8"
+  },
+  "spent_usd": 0.0,
+  "split": "dev",
+  "stage": "retrieval",
+  "started": "2026-11-26T16:28:07+00:00",
+  "status": "complete",
+  "tuning": {
+    "all_dev": 0.3,
+    "folds": {
+      "0": 0.3,
+      "1": 0.3,
+      "2": 0.3,
+      "3": 0.3,
+      "4": 0.3
+    },
+    "grid": [
+      0.0,
+      0.1,
+      0.2,
+      0.3,
+      0.4,
+      0.5,
+      0.6,
+      0.7,
+      0.8,
+      0.9,
+      1.0
+    ],
+    "seed": "phase-3-folds-2026-11-25",
+    "setting": "alpha"
+  }
+}
