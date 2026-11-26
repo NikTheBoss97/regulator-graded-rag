@@ -33,7 +33,10 @@ Qwen3-Embedding beats BM25 with p < 0.05, or if its mean difference falls below 
   recall@10 (p = 0.0062) ([0001](0001-dense-bge-base-against-bm25.md)).
 - **The same model elsewhere.** On SearchFireSafety's real questions about Korean
   fire-safety statutes, Qwen3-Embedding-0.6B reached 48.70 recall@10 against BM25's
-  23.39 (Chae et al., 2026, *read-part*; full reference in 0001).
+  23.39 (Chae et al., 2026, *read-part*).
+
+*read-part*: the abstract and the sections reporting these results were read, not the
+whole paper.
 
 ## 3. Setup
 
@@ -122,14 +125,16 @@ number (`\b(?:UN|NA)\s?\d{4}\b`), else neither.
   the answerable questions but 35% of the regressions.
 - **Unlike E1 and E2, questions without an explicit number regress in proportion:** 32%
   of the regressions and 32% of all questions.
-- **The definitions are kept.** Of the 25 answerable questions that cite §171.8, the
-  regulation's definitions, Qwen3-Embedding ranks it in the top 10 for 8, against 10 for
-  BM25, 6 for bge-base and 3 for gte-modernbert. It never leaves the top 50 in a
-  regression, and 5 of the 18 improvements cite it.
+- **The definitions fare better than with the other dense models.** Of the 25
+  answerable questions that cite §171.8, the regulation's definitions, Qwen3-Embedding
+  ranks it in the top 10 for 8, against 10 for BM25, 6 for bge-base and 3 for
+  gte-modernbert. In every regression where BM25 had it in its top 50, so does
+  Qwen3-Embedding, and 5 of the 18 improvements cite it.
 - **The Hazardous Materials Table attracts.** Qwen3-Embedding ranks a passage of
   §172.101 first for 28 of the 214 questions, though only 4 cite that section; BM25 does
-  so for 5, bge-base for 5 and gte-modernbert for 7.
-- **In 8 regressions every cited section left the top 50** (E1: 4, E2: 15).
+  so for 5, bge-base for 5 and gte-modernbert for 7. §172.101 holds 6,418 of the
+  corpus's 13,539 passages, one per row of the table.
+- **In 8 regressions no cited section is in the top 50** (E1: 4, E2: 15).
 - 18 questions regressed under all three dense models, and 8 improved under all three;
   7 regressions are Qwen3-Embedding's alone.
 
@@ -145,15 +150,17 @@ Six of the sharpest regressions, read in full, show three failure patterns:
   naturally occurring radioactive material in § 173.401 (17-0114-Q1) sent BM25 to
   §173.401 at rank 1; Qwen3-Embedding ranked the applicability section §171.1 and table
   passages first, and none of the four cited sections in its top 50. A question about
-  § 178.345-9(h) and the vent of a DOT 406 cargo tank motor vehicle (25-0043-Q1) got the
-  pressure relief rules of tank cars (§§179.400-20, 179.15), cylinders (§173.301) and UN
-  pressure receptacles (§178.75) first, and §178.345-9 16th; BM25 ranked it first.
+  § 178.345-9(h) and the vent of a DOT 406 cargo tank motor vehicle (25-0043-Q1) got
+  the tank car rules on pressure relief devices (§§179.400-20, 179.15), the general rule
+  for cylinders (§173.301), the general rule for cargo tank motor vehicles (§173.33) and
+  the specification for multiple-element gas containers (§178.75) first, and §178.345-9
+  16th; BM25 ranked it first.
 - **A neighbouring rule on the same idea wins.** Asked whether "CA" may abbreviate
   "case" on a shipping paper (18-0068-Q1), Qwen3-Embedding ranked §172.308, which allows
   abbreviations in markings, above the cited shipping paper rule §172.202, which fell
-  from rank 1 to 30. For a repackaged explosive's approval (21-0009-Q3), it ranked five
-  passages of §173.62, the explosives packing instructions, first, and the cited
-  approval rule §173.56 outside its top 50 (BM25: rank 6).
+  from rank 1 to 30. For a repackaged explosive's approval (21-0009-Q3), all 50 of its
+  top 50 passages were from §173.62, the specific packaging requirements for
+  explosives, so the cited approval rule §173.56 was not among them (BM25: rank 6).
 
 The other 31 regressions were classified by the table above, not read one by one.
 
@@ -176,11 +183,12 @@ The other 31 regressions were classified by the table above, not read one by one
   p = 0.016: the result holds. This check is reported beside ADR-0024's decision, not as
   part of it.
 - **The dense models are not compared with each other.** Each is tested against BM25.
-  Qwen3-Embedding's recall@10 is 0.008 above bge-base's, a tenth of the smallest
+  Qwen3-Embedding's recall@10 is 0.007 above bge-base's, a tenth of the smallest
   difference this sample detects, so these runs do not show that one dense model
   retrieves better than another.
 - **Latency depends on the machine's load.** A run times each question as it is
-  computed, so other programs on the laptop slow it. This run's machine was idle.
+  computed, so other programs on the laptop slow it. This run's machine was idle: only
+  its first question took over 0.15 s, as the first does in every run.
 - **Machine-dependent numerics.** The vectors were computed once on one GPU; another
   machine may round differently and swap near-tied passages, which is why the vectors'
   SHA-256 is recorded and published runs come from one machine.
@@ -192,7 +200,7 @@ The other 31 regressions were classified by the table above, not read one by one
 **Rejected.** Qwen3-Embedding-0.6B lowers section recall@10 by 0.065 (95% interval −0.117
 to −0.014, p = 0.013), so BM25 remains the baseline. The hypothesis held as written: the
 difference lies above E1's −0.073, and the test supports no gain. But the margin over
-E1, 0.008, is far too small to show that this model retrieves better than bge-base.
+E1, 0.007, is far too small to show that this model retrieves better than bge-base.
 Configurations tried in phase 3 so far: 3.
 
 ## 8. Reproduction
@@ -213,3 +221,7 @@ uv run python -m regulator_graded_rag.compare 2026-11-24-bm25-dev-1 2026-11-26-d
 
 A rerun writes a new run folder. The comparison record recomputes byte for byte from the
 two committed runs, which a unit test checks.
+
+## References
+
+- Kyubyung Chae, Jewon Yeom, Jeongjae Park, Seunghyun Bae, Ijun Jang, Hyunbin Jin, Jinkwan Jang and Taesup Kim, [Beyond Case Law: Evaluating Structure-Aware Retrieval and Safety in Statute-Centric Legal QA](https://arxiv.org/abs/2604.06173) (arXiv, 2026).
