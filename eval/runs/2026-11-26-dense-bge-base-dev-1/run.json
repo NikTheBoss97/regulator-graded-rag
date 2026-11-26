@@ -1,0 +1,49 @@
+{
+  "config": {
+    "path": "eval/configs/dense-bge-base.toml",
+    "sha256": "b96ba4d08ed13a4a693d1b3022cc2d9fb7ee3c3e5e160326dae0b45afb7daea8",
+    "text": "# Author: Nicola Antonello\n# E1: dense retrieval with bge-base-en-v1.5 against the BM25 baseline (ADR-0009). The\n# query prompt is the model card's instruction at this revision, verified on 2026-11-25;\n# passages get none. A config that produced a committed run is never edited (ADR-0023).\nname = \"dense-bge-base\"\n\n[[first_stage]]\nkind = \"dense\"\nmodel = \"BAAI/bge-base-en-v1.5\"\nrevision = \"a5beb1e3e68b9ab74eb54cfd186867f64f240e1a\"\nweights_sha256 = \"c7c1988aae201f80cf91a5dbbd5866409503b89dcaba877ca6dba7dd0a5167d7\"\nquery_prompt = \"Represent this sentence for searching relevant passages: \"\nmax_length = 512\n"
+  },
+  "corpus_version": "ecaac596422344e6b548dcd8a1816261a27d398d0d707077def27a5976db34ef",
+  "cost_usd": 0.0,
+  "finished": "2026-11-26T15:54:54+00:00",
+  "git": {
+    "commit": "2fb685ee7ba4db44ec114356e15f76882952eed9",
+    "dirty": false,
+    "tree": "7abbb2f8b0d5b3ddef28799795c9c2fd245fb848"
+  },
+  "gold": {
+    "answerable": 214,
+    "items": 250,
+    "path": "eval/dev/items.jsonl",
+    "version": "7bfdfdf9990f31769dda403ece213e9ccfeafd56a3dae434e12eb54d86bad3bb"
+  },
+  "heldout_runs": 0,
+  "machine": {
+    "platform": "Windows-11-10.0.26300-SP0",
+    "processor": "Intel64 Family 6 Model 183 Stepping 1, GenuineIntel",
+    "python": "3.14.7"
+  },
+  "questions": 250,
+  "retriever": "dense-bge-base",
+  "seconds": {
+    "median": 0.10261849999369588,
+    "p95": 0.11833610500034411,
+    "total": 24.936244100084878
+  },
+  "settings": {
+    "config_file": "eval/configs/dense-bge-base.toml",
+    "config_sha256": "b96ba4d08ed13a4a693d1b3022cc2d9fb7ee3c3e5e160326dae0b45afb7daea8",
+    "cuda": "12.6",
+    "dtype": "float32",
+    "gpu": "NVIDIA GeForce RTX 4070 Laptop GPU",
+    "torch": "2.14.1+cu126",
+    "truncated": 20,
+    "vectors_sha256": "3c0748cc66466f00b7b0016ce6471ee9295489c7bdb9646ee67128fe2be25cb1"
+  },
+  "spent_usd": 0.0,
+  "split": "dev",
+  "stage": "retrieval",
+  "started": "2026-11-26T15:54:29+00:00",
+  "status": "complete"
+}

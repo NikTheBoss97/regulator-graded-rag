@@ -115,6 +115,8 @@ The difference in section recall@10, bge-base minus BM25:
   lookup questions most (−0.082), though results by type are description only.
 - **Latency per question:** median 0.278 s and 95th percentile 0.393 s for bge-base,
   embedding the question on the GPU included, against 0.050 s and 0.112 s for BM25.
+  Other load on the laptop most likely slowed these times; measured again, they are
+  0.103 s and 0.118 s (see the amendment of 2026-11-26).
 
 ## 5. Flips
 
@@ -200,6 +202,18 @@ uv run python -m regulator_graded_rag.compare 2026-11-24-bm25-dev-1 2026-11-25-d
 
 A rerun writes a new run folder. The comparison record recomputes byte for byte from the
 two committed runs, which a unit test checks.
+
+## Amendments
+
+- 2026-11-26: E1's latency was measured again on an idle laptop, in run
+  `2026-11-26-dense-bge-base-dev-1` at commit `2fb685e` (tree `7abbb2f8`), with no
+  uncommitted changes to tracked files: a median of 0.103 s and a 95th percentile of
+  0.118 s per question, against 0.278 s and 0.393 s in the first run. Every question
+  took longer in the first run, by a median of 0.18 s (from 0.05 to 0.59 s), most
+  likely because other programs used the laptop. Only the times changed: the passage vectors, computed again in float32,
+  came out byte for byte the same (SHA-256 `3c0748cc…`), and the re-run returned the
+  same 50 passages, with the same scores, for all 250 questions. Every other number in
+  this report stands.
 
 ## References
 
