@@ -93,6 +93,16 @@ computes deterministically, as BM25 does; a GPU's kernels may differ in the last
 - The `--k1` and `--b` flags stay, for the baseline's own command. Beside `--config`
   they are refused, because the config sets every setting.
 
+## Amendments
+
+- 2026-11-26: A dense stage's identity, and so its cache key, holds more than its
+  vectors' checksum: the vectors' dtype and the count of passages cut to the input
+  length (ADR-0009's amendment of 2026-11-25), the database server's and pgvector's
+  versions, which compute the distances, and the device the question is embedded on,
+  with torch's and CUDA's versions. A cache filled on another device or under another
+  torch is not reused, and a run resumed there is refused, since its recorded settings
+  differ.
+
 ## References
 
 - D. Sculley, Gary Holt, Daniel Golovin, Eugene Davydov, Todd Phillips, Dietmar Ebner, Vinay Chaudhary, Michael Young, Jean-François Crespo and Dan Dennison, [Hidden Technical Debt in Machine Learning Systems](https://proceedings.neurips.cc/paper_files/paper/2015/hash/86df7dcfd896fcaf2674f757a2463eba-Abstract.html) (NIPS, 2015). Configuration issues are among the ML-specific risk factors behind ongoing maintenance costs.
