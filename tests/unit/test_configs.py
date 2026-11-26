@@ -155,3 +155,17 @@ def test_a_prompt_keeps_its_newline(tmp_path: Path) -> None:
     body = DENSE.replace('query_prompt = ""', 'query_prompt = "Instruct: x\\nQuery:"')
     stage = load_config(write(tmp_path, "dense", body)).first[0]
     assert isinstance(stage, DenseStage) and stage.query_prompt == "Instruct: x\nQuery:"
+
+
+@pytest.mark.parametrize(
+    "grid",
+    [
+        '[fusion]\nmethod = "rrf"\nk = [10, 30, 30.0, 100]\n',
+        '[fusion]\nmethod = "weighted"\nalpha = [0.0, 0.5, 0.5]\n',
+    ],
+)
+def test_a_grid_with_a_repeated_value_is_refused(tmp_path: Path, grid: str) -> None:
+    # A repeated value would collapse when the run builds one pipeline per value, so
+    # the run's recorded grid would differ from the file's (ADR-0023).
+    with pytest.raises(ConfigError, match="repeats"):
+        load_config(write(tmp_path, "hybrid", BM25 + DENSE + grid + CV))

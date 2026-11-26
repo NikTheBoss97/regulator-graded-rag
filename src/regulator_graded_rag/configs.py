@@ -225,6 +225,8 @@ def load_config(path: Path) -> Config:
         if method == "rrf" and not all(v >= 0 for v in values):
             raise ConfigError(f"{where} fusion: k must be 0 or more")
         fusion = Fusion(method, tuple(float(v) for v in values))
+        if len(set(fusion.values)) != len(fusion.values):
+            raise ConfigError(f"{where} fusion: {key} repeats a value")
     elif len(first) == 2:
         raise ConfigError(f"{where}: two first stages need a fusion")
     rerank = None
@@ -242,6 +244,8 @@ def load_config(path: Path) -> Config:
             raise ConfigError(
                 f"{where} rerank: depth must be whole numbers from 1 to {DEPTH}"
             )
+        if len(set(depths)) != len(depths):
+            raise ConfigError(f"{where} rerank: depth repeats a value")
         rerank = RerankStage(
             model,
             revision,
