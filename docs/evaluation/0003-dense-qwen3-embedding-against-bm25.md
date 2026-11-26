@@ -170,9 +170,11 @@ The other 31 regressions were classified by the table above, not read one by one
 - **The labels are the regulator's citations.** A passage that answers a question in a
   section the regulator did not cite counts as a miss, for both methods alike.
 - **Questions from one letter are not independent.** The 214 questions come from 155
-  letters, up to 5 from one. Counting each letter once instead, by the mean of its
-  questions' differences, gives −0.078 and p = 0.011: the result holds. This check is not
-  part of ADR-0024's decision rule.
+  letters, up to 5 from one, and the paired test flips each question's sign on its own.
+  Flipping all of a letter's questions together instead, with ADR-0024's test over each
+  letter's summed differences (`compare.letter_sums`), keeps the difference and gives
+  p = 0.016: the result holds. This check is reported beside ADR-0024's decision, not as
+  part of it.
 - **The dense models are not compared with each other.** Each is tested against BM25.
   Qwen3-Embedding's recall@10 is 0.008 above bge-base's, a tenth of the smallest
   difference this sample detects, so these runs do not show that one dense model

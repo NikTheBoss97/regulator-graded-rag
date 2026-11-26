@@ -168,10 +168,11 @@ The other 41 regressions were classified by the table above, not read one by one
 - **The labels are the regulator's citations.** A passage that answers a question in a
   section the regulator did not cite counts as a miss, for both methods alike.
 - **Questions from one letter are not independent.** The 214 questions come from 155
-  letters, up to 5 from one, and the paired test counts each question once. Counting
-  each letter once instead, by the mean of its questions' differences, gives −0.092 and
-  p = 0.0042 for gte-modernbert, and −0.077 and p = 0.013 for E1's bge-base: both
-  results hold. This check is not part of ADR-0024's decision rule.
+  letters, up to 5 from one, and the paired test flips each question's sign on its own.
+  Flipping all of a letter's questions together instead, with ADR-0024's test over each
+  letter's summed differences (`compare.letter_sums`), keeps the difference and gives
+  p = 0.0079 for gte-modernbert and p = 0.0097 for E1's bge-base: both results hold.
+  This check is reported beside ADR-0024's decision, not as part of it.
 - **Latency depends on the machine's load.** A run times each question as it is
   computed, so other programs on the laptop slow it. This run's machine was idle. E1's
   times are uniformly higher than this run's, its fastest question 0.178 s against

@@ -6,7 +6,14 @@ from pathlib import Path
 
 import pytest
 
-from regulator_graded_rag.compare import DRAWS, compare, main, paired_p, t_quantile
+from regulator_graded_rag.compare import (
+    DRAWS,
+    compare,
+    letter_sums,
+    main,
+    paired_p,
+    t_quantile,
+)
 from regulator_graded_rag.power import mdd
 
 
@@ -88,6 +95,21 @@ def test_only_dev_runs_are_compared(tmp_path: Path) -> None:
     (held_out / "run.json").write_text(json.dumps(run), encoding="utf-8")
     with pytest.raises(ValueError, match="dev"):
         compare(a, held_out)
+
+
+def test_letter_sums_add_each_letters_questions_in_letter_order() -> None:
+    # A question's letter is its ID without "-Q<n>"; Q10 sorts before Q2 and stays
+    # with its letter.
+    ids = ["17-0002-Q1", "17-0002-Q3", "18-0001-Q1", "18-0001-Q10", "18-0001-Q2"]
+    assert letter_sums(ids, [0.0, -1.0, 0.5, 1.0, 0.25]) == [-1.0, 1.75]
+
+
+def test_a_letter_level_test_keeps_the_per_question_statistic() -> None:
+    # Flipping whole letters changes the unit of randomization, not the statistic: with
+    # one question per letter the two tests are the same test.
+    diffs = [0.5, -0.25, 1.0, 0.75, -0.5, 1.0, 0.25, 0.5, 1.0]
+    ids = [f"{n:02}-0001-Q1" for n in range(len(diffs))]
+    assert paired_p(letter_sums(ids, diffs)) == paired_p(diffs)
 
 
 def test_t_quantile_is_rounded_to_twelve_digits() -> None:
