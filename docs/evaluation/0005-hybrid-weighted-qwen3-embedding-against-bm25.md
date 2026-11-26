@@ -102,6 +102,11 @@ The difference in section recall@10, the weighted hybrid minus BM25:
 - As description, the hybrid is at or above BM25 at every cutoff and on every metric
   overall, and above E4 at 5, 10 and 50. Its difference against BM25, +0.011, is above
   E4's +0.006, as predicted.
+- **Each α, fixed for every question,** recomputed from the committed BM25 and E3 runs,
+  whose hits are this run's two stages: α = 0.3 scores best on all of dev, 0.702, the
+  value every fold chose. α = 0 gives BM25's 0.691 exactly, the other values from 0.1 to
+  0.6 score from 0.687 to 0.697, and the score falls as the dense weight grows past 0.6,
+  to 0.626 at α = 1, Qwen3-Embedding's own; α = 0.9 and 1 are below BM25 with p = 0.013.
 - **Latency per question:** median 0.140 s and 95th percentile 0.236 s for BM25,
   Qwen3-Embedding and the fusion together, against 0.050 s and 0.112 s for BM25 alone.
 
@@ -124,8 +129,8 @@ number (`\b(?:UN|NA)\s?\d{4}\b`), else neither.
   from 36th to 8th, while BM25's top passages mostly kept their places.
 - **All four regressions are multi-passage questions** that lost one of their several
   cited sections from the top 10; none lost them all from the top 50. In the one read in
-  full, 18-0027-Q2, three of the four cited sections stayed near BM25's ranks, and
-  §173.25 fell from 6th to 14th.
+  full, 18-0027-Q2, §171.8 went from BM25's 2nd to 3rd and §173.421 from 5th to 4th,
+  while §173.25 fell from 6th to 14th and §173.403 from 38th to outside the top 50.
 
 The other 3 improvements and 3 regressions were classified by the table above, not read
 one by one.
