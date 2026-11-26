@@ -121,6 +121,18 @@ def paired_p(
     return (1 + hits) / (1 + draws)
 
 
+def letter_sums(ids: Sequence[str], diffs: Sequence[float]) -> list[float]:
+    """Each letter's summed differences, letters in ID order. A question's letter is its
+    ID without "-Q<n>", and one letter's questions share a requester and the sections
+    the regulator cited, so they are not independent. paired_p over these sums flips a
+    letter's questions together and keeps the statistic, the total difference: a check
+    reported beside ADR-0024's decision, never the decision."""
+    letters: dict[str, list[float]] = {}
+    for item_id, diff in zip(ids, diffs, strict=True):
+        letters.setdefault(item_id.rsplit("-Q", 1)[0], []).append(diff)
+    return [math.fsum(letters[letter]) for letter in sorted(letters)]
+
+
 def _interval(diffs: Sequence[float]) -> tuple[float, float, float, float]:
     """The mean, its 95% t-interval and the standard deviation of the differences."""
     mean = math.fsum(diffs) / len(diffs)
