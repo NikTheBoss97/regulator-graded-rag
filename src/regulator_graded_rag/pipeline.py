@@ -14,14 +14,16 @@ stage cache under a key made of:
 A key never outlives the code or the data that filled it. The gold set is not part of a
 key, since a stage sees only the question's text, which keys each entry. Each entry keeps
 the seconds its stage took, and compute_seconds() reports them for the last search, so a
-run answered from the cache still records what each answer cost. This version runs a
-single first stage, BM25 or dense, and settings() names what a dense stage's answers
-depend on beyond its config (RECORDED): its vectors' SHA-256, dtype and count of cut
-passages, and the device, torch and CUDA it ran on. Fusion and reranking come with
-their experiments.
+run answered from the cache still records what each answer cost. A config runs one first
+stage, BM25 or dense, or two fused by RRF or a weighted sum; the fusion's own entries
+sit under a key made of its settings and both stages' keys, and a fused answer reports
+the seconds of all three steps. settings() names what a dense stage's answers depend on
+beyond its config (RECORDED): its vectors' SHA-256, dtype and count of cut passages, and
+the device, torch and CUDA it ran on. Reranking comes with its own experiments.
 """
 
 import hashlib
+import math
 import time
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import asdict
@@ -30,9 +32,10 @@ from typing import Protocol
 
 from regulator_graded_rag.bm25 import BM25, Conn, Hit
 from regulator_graded_rag.cache import Entry, StageCache, source_digest, stage_key
-from regulator_graded_rag.configs import Bm25Stage, Config, ConfigError
+from regulator_graded_rag.configs import Bm25Stage, Config, ConfigError, DenseStage
 from regulator_graded_rag.dense import Dense
 from regulator_graded_rag.embeddings import Encoder, model_key
+from regulator_graded_rag.fusion import rrf, weighted
 from regulator_graded_rag.index import SCHEMA
 from regulator_graded_rag.metrics import DEPTH
 
@@ -95,6 +98,31 @@ class Pipeline:
             )
         ]
         self._identities = identities
+        self._fusion_key: str | None = None
+        if config.fusion is not None:
+            if len(config.fusion.values) != 1:
+                raise ConfigError(
+                    f"{config.path} tunes {config.tuned}: use one of its values"
+                )
+            kinds = [type(settings) for settings in config.first]
+            if config.fusion.method == "weighted" and sorted(
+                kind.__name__ for kind in kinds
+            ) != sorted((Bm25Stage.__name__, DenseStage.__name__)):
+                raise ConfigError(
+                    f"{config.path}: a weighted fusion needs one bm25 and one dense"
+                    " stage"
+                )
+            # The weighted sum weighs the lists by kind, not by their order.
+            self._bm25_at = kinds.index(Bm25Stage) if Bm25Stage in kinds else 0
+            self._fusion_key = stage_key(
+                {
+                    "stage": "Fusion",
+                    "settings": asdict(config.fusion),
+                    "upstream": [key for key, _ in self._first],
+                    "corpus_version": corpus_version,
+                    "code": code,
+                }
+            )
 
     def settings(self) -> dict[str, str | float]:
         """The config by path and SHA-256, and for a dense stage the parts of its
@@ -122,14 +150,33 @@ class Pipeline:
             self._cache.put(key, question, entry.hits, entry.seconds)
         return entry
 
+    def _fuse(self, lists: Sequence[Sequence[Hit]]) -> list[Hit]:
+        fusion = self._config.fusion
+        assert fusion is not None
+        if fusion.method == "rrf":
+            return rrf(lists, fusion.values[0])
+        bm25 = lists[self._bm25_at]
+        dense = lists[1 - self._bm25_at]
+        return weighted(bm25, dense, fusion.values[0])
+
     def search(self, question: str, k: int) -> list[Hit]:
         """The k best passages, k at most DEPTH, which every stage keeps."""
         if k > DEPTH:
             raise ValueError(f"each stage keeps its top {DEPTH} passages, not {k}")
-        key, stage = self._first[0]
-        entry = self._cached(key, stage, question)
-        self._seconds = entry.seconds
-        return entry.hits[:k]
+        entries = [self._cached(key, stage, question) for key, stage in self._first]
+        if self._fusion_key is None:
+            self._seconds = entries[0].seconds
+            return entries[0].hits[:k]
+        fused = self._cache.get(self._fusion_key, question)
+        if fused is None:
+            start = self._clock()
+            hits = self._fuse([entry.hits for entry in entries])
+            fused = Entry(hits, self._clock() - start)
+            self._cache.put(self._fusion_key, question, fused.hits, fused.seconds)
+        self._seconds = math.fsum(
+            [*(entry.seconds for entry in entries), fused.seconds]
+        )
+        return fused.hits[:k]
 
     def compute_seconds(self) -> float:
         """The seconds the last search's stages took to compute its answer, whether it
@@ -148,35 +195,43 @@ def build(
 ) -> Pipeline:
     """The pipeline for a fixed config, with each dense stage's encoder found by
     model_key(model, revision); refused with ConfigError for a grid, a missing encoder,
-    or stages this version cannot run."""
+    or a reranker, which comes with its own experiments."""
     if config.tuned is not None:
         raise ConfigError(
             f"{config.path} tunes {config.tuned}: build a pipeline for one of its values"
         )
-    if config.fusion or config.rerank:
-        raise ConfigError(f"{config.path}: this pipeline runs a single first stage")
-    stage = config.first[0]
-    first: Stage
-    if isinstance(stage, Bm25Stage):
-        first = BM25(
-            conn, corpus_version=corpus_version, k1=stage.k1, b=stage.b, schema=schema
-        )
-    else:
+    if config.rerank is not None:
+        raise ConfigError(f"{config.path}: reranking comes with its own experiments")
+    first: list[Stage] = []
+    for stage in config.first:
+        if isinstance(stage, Bm25Stage):
+            first.append(
+                BM25(
+                    conn,
+                    corpus_version=corpus_version,
+                    k1=stage.k1,
+                    b=stage.b,
+                    schema=schema,
+                )
+            )
+            continue
         encoder = (encoders or {}).get(model_key(stage.model, stage.revision))
         if encoder is None:
             raise ConfigError(
                 f"{config.path}: no encoder for {stage.model} at {stage.revision}"
             )
-        first = Dense(
-            conn,
-            stage=stage,
-            corpus_version=corpus_version,
-            encoder=encoder,
-            index_schema=schema,
+        first.append(
+            Dense(
+                conn,
+                stage=stage,
+                corpus_version=corpus_version,
+                encoder=encoder,
+                index_schema=schema,
+            )
         )
     return Pipeline(
         config,
-        [first],
+        first,
         corpus_version=corpus_version,
         cache=cache,
         code=code_digest(),
