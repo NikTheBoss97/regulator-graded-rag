@@ -562,7 +562,8 @@ def test_a_tuned_run_starts_again_rather_than_resume(
     (runs / "stopped" / "run.json").write_text("{}", encoding="utf-8")
     argv = ["--split", "dev", "--config", str(tuned_config(tmp_path))]
     assert main([*argv, "--resume", "stopped", "--runs", str(runs)]) == 1
-    assert "starts again" in capsys.readouterr().out
+    out = capsys.readouterr().out
+    assert "starts again" in out and f"delete {(runs / 'stopped').as_posix()}" in out
 
 
 def test_tuning_never_touches_the_held_out_split(tmp_path: Path) -> None:

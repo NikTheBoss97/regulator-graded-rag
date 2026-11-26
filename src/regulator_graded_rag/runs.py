@@ -546,7 +546,9 @@ def main(argv: Sequence[str] | None = None) -> int:
             # Its folds' values come from scores over every item, which a part-run
             # would not have: a tuned run starts again, its stages answered by the cache.
             print(
-                f"{config.name} tunes {config.tuned}: a stopped tuned run starts again"
+                f"{config.name} tunes {config.tuned}: a stopped tuned run starts again;"
+                f" delete {(runs / args.resume).as_posix()}, which it left, before"
+                " committing"
             )
             return 1
     try:
