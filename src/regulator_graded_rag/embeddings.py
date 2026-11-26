@@ -4,9 +4,10 @@
 A model's passage vectors are computed once, on the Windows laptop, and saved as raw
 little-endian float32 rows, one per passage in the index's order, so row i belongs to
 the passage with ordinal i + 1. A JSON sidecar, <file>.json, names the model, its
-revision, the corpus version, the count, the dimension, how many passages were longer
-than the model's input, and the raw file's SHA-256. The file holds no pickle and needs
-no numpy to read.
+revision, the corpus version, the count, the dimension, the input length and precision
+the vectors were made with (max_length and dtype), how many passages were longer than
+that input, and the raw file's SHA-256. The file holds no pickle and needs no numpy to
+read.
 
 Loading a file fills a pgvector table, <schema>.<model key>, keyed by passage ordinal,
 and the model's row in <schema>.meta, in one transaction. A file is refused when its
