@@ -65,7 +65,8 @@ positive.
   3.14.7; the run record names the GPU and torch's and CUDA's versions. Everything ran
   locally, at no cost. Embedding the passages took 2 min 43 s, download and model
   loading included, while another program shared the GPU, so that time is not compared
-  with E1's. The run took 30 s for 250 questions, on an idle machine.
+  with E1's. The run took 30 s for 250 questions, while other commands ran on the
+  laptop (section 6).
 
 ## 4. Results
 
@@ -101,7 +102,8 @@ The difference in section recall@10, gte-modernbert minus BM25:
 - Table questions lost most, −0.101, and lookup questions least, −0.066.
 - **Latency per question:** median 0.102 s and 95th percentile 0.201 s for
   gte-modernbert, embedding the question on the GPU included, against 0.050 s and
-  0.112 s for BM25. Section 6 explains why E1's 0.278 s is not compared.
+  0.112 s for BM25. Other commands slowed parts of this run, so its 95th percentile
+  overstates it; section 6 gives the details, and why E1's 0.278 s is not compared.
 
 ## 5. Flips
 
@@ -120,40 +122,45 @@ number (`\b(?:UN|NA)\s?\d{4}\b`), else neither.
   questions but 36% of the regressions.
 - **Table questions regress in proportion,** 20% of the questions and 21% of the
   regressions, but none of the 21 improvements is a table question. Four of the ten
-  table regressions are questions from one letter, 23-0066, and each lost one of the
-  several sections it cites.
+  table regressions are questions from one letter, 23-0066: all four lost §172.313 from
+  the top 10, and 23-0066-Q2 lost §172.504 as well.
 - **Questions without an explicit number regress more often:** 43% of the regressions
   against 32% of all questions (E1: 45%).
 - **The definitions section is lost.** 25 answerable questions cite §171.8, the
   regulation's definitions. BM25 ranks it in the top 10 for 10 of them, bge-base for 6
-  and gte-modernbert for 3. It is cited by 12 of the 47 regressions, and leaves the top
-  50 in 7 of them.
-- **In 15 regressions every cited section left the top 50** (E1: 4). That is why
+  and gte-modernbert for 3. It is cited by 12 of the 47 regressions, and in 7 of them
+  BM25 had it in its top 50 and gte-modernbert did not.
+- **In 15 regressions no cited section is in the top 50** (E1: 4). That is why
   recall@50 falls to 0.775: a later stage that reorders the top 50 cannot bring them
   back.
 
 Six of the sharpest regressions, read in full, show four failure patterns, three of them
 seen in E1:
 
-- **A definition loses to the applicability rules (new).** Asked whether a shipment of
-  PCB waste is subject to the regulations (18-0081-Q3), and whether a vehicle that is not
-  a "motor vehicle" as the regulations define it is (22-0038-Q4), gte-modernbert ranked
-  the applicability sections §§171.1, 171.3 and 171.23 first, and the cited §171.8 not
-  in its top 50. BM25 had §171.8 at ranks 7 and 3.
+- **A definition loses to the rules that use it (new).** Asked whether a shipment of
+  PCB waste is subject to the regulations (18-0081-Q3), gte-modernbert ranked the
+  hazardous waste rules §§171.3 and 172.205 and §171.23, on shipments under the
+  international standards, first. Asked whether a vehicle that is not a "motor vehicle"
+  as the regulations define it is (22-0038-Q4), it ranked four passages of the
+  applicability section §171.1 first. The cited §171.8 was in neither top 50; BM25 had
+  it at ranks 7 and 3.
 - **An exact identifier is ignored.** A question naming § 173.219(c)(5), the exception
   for life-saving appliances (22-0001-Q2), sent BM25 to §173.219 at rank 1.
-  gte-modernbert ranked the air transport rule §175.10 and the cylinder sections
-  §§173.302a, 173.306, 173.302 and 173.304 first, and §173.219 outside its top 50.
+  gte-modernbert ranked the air transport exceptions of §175.10 and the compressed gas
+  sections §§173.302a, 173.306, 173.302 and 173.304 first, and §173.219 outside its top
+  50.
 - **A neighbouring section, or another packaging's rules, wins.** For a shipping paper
   that lists a material not subject to the regulations (23-0012-Q2), gte-modernbert
   ranked §172.202 first, and the cited §172.201 fell from rank 1 out of its top 50. For
   the retest date of an MC 338 cargo tank motor vehicle (26-0094-Q1), it ranked the
-  cylinder requalification sections §§180.209, 180.205 and 180.207 first, and the
-  cargo tank rule the regulator cited, §180.407, 32nd. BM25 ranked §180.407 first.
+  requalification rules for cylinders and UN pressure receptacles, §§180.209, 180.205
+  and 180.207, first, and the cargo tank rule the regulator cited, §180.407, 32nd. BM25
+  ranked §180.407 first.
 - **The requester's context outweighs the question.** A question about smokeless
   powder sold at retail (18-0001-Q3) opens with four entries of the Hazardous Materials
-  Table. gte-modernbert's top five were all §172.101 passages, and the cited §173.171, on
-  smokeless powder for small arms, left its top 50. BM25 ranked it first.
+  Table. All 50 of gte-modernbert's top 50 passages were from §172.101, so the cited
+  §173.171, on smokeless powder for small arms, was not among them. BM25 ranked it
+  first.
 
 The other 41 regressions were classified by the table above, not read one by one.
 
@@ -174,11 +181,13 @@ The other 41 regressions were classified by the table above, not read one by one
   p = 0.0079 for gte-modernbert and p = 0.0097 for E1's bge-base: both results hold.
   This check is reported beside ADR-0024's decision, not as part of it.
 - **Latency depends on the machine's load.** A run times each question as it is
-  computed, so other programs on the laptop slow it. This run's machine was idle. E1's
-  times are uniformly higher than this run's, its fastest question 0.178 s against
-  0.064 s here, although a question takes the same two steps in both: one encoding and
-  one exact search over 768-dimension vectors. So E1's times are not compared with this
-  run's.
+  computed, so other programs on the laptop slow it. This run's machine was not idle:
+  other commands ran during it, and 42 of its 250 questions took over 0.15 s, in
+  bursts, against 1 in E3's run, so its 95th percentile overstates its latency more
+  than its median does. E1's times are uniformly higher than this run's, its fastest
+  question 0.178 s against 0.064 s here, although a question takes the same two steps
+  in both: one encoding and one exact search over 768-dimension vectors. So E1's times
+  are not compared with this run's.
 - **Machine-dependent numerics.** The vectors were computed once on one GPU; another
   machine may round differently and swap near-tied passages, which is why the vectors'
   SHA-256 is recorded and published runs come from one machine.
@@ -209,3 +218,11 @@ uv run python -m regulator_graded_rag.compare 2026-11-24-bm25-dev-1 2026-11-25-d
 
 A rerun writes a new run folder. The comparison record recomputes byte for byte from the
 two committed runs, which a unit test checks.
+
+## References
+
+The studies section 2 refers to, summarised in report 0001:
+
+- Kyubyung Chae, Jewon Yeom, Jeongjae Park, Seunghyun Bae, Ijun Jang, Hyunbin Jin, Jinkwan Jang and Taesup Kim, [Beyond Case Law: Evaluating Structure-Aware Retrieval and Safety in Statute-Centric Legal QA](https://arxiv.org/abs/2604.06173) (arXiv, 2026).
+- Yeong-Joon Ju and Seong-Whan Lee, [Citation-Closure Retrieval and Per-Rule Attribution for Real-World Regulatory Compliance Question Answering](https://arxiv.org/abs/2605.29742) (arXiv, 2026).
+- Tuba Gokhan, Kexin Wang, Iryna Gurevych and Ted Briscoe, [RIRAG: Regulatory Information Retrieval and Answer Generation](https://arxiv.org/abs/2409.05677) (arXiv, 2024).
