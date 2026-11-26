@@ -9,7 +9,12 @@ the repository root, with DATABASE_URL set as in .env.example.
 .cache/pipeline/<split>, and the run is named after the config. Without it the command
 runs BM25 with k1 and b, which a config sets itself. A config's name stays bound to the
 contents of its first run, so a config changed since a run under its name is refused
-(ADR-0023).
+(ADR-0023). A config with a grid is tuned by cross-validation (ADR-0024): every grid
+value searches every answerable item, through the cache, and is scored; each fold then
+gets the value chosen on the other folds, and the run holds each item's hits under its
+fold's value. Its run file adds the setting, the grid, the fold seed, each fold's value
+and the value chosen on all of dev. A stopped tuned run starts again; it does not
+resume.
 
 A run is one folder, eval/runs/<YYYY-MM-DD>-<retriever>-<split>-<n>/:
 - run.json, the run file: the commit, its tree and whether tracked files had uncommitted
@@ -36,7 +41,7 @@ import platform
 import statistics
 import subprocess
 import time
-from collections.abc import Callable, Iterable, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import asdict, replace
 from datetime import UTC, date, datetime
 from pathlib import Path
@@ -44,7 +49,13 @@ from typing import Any, Protocol, runtime_checkable
 
 from regulator_graded_rag.bm25 import BM25, K1, B, Retriever, StaleIndex
 from regulator_graded_rag.cache import CACHE_ROOT, StageCache
-from regulator_graded_rag.configs import Config, ConfigError, DenseStage, load_config
+from regulator_graded_rag.configs import (
+    Config,
+    ConfigError,
+    DenseStage,
+    fixed,
+    load_config,
+)
 from regulator_graded_rag.db import connect, database_url
 from regulator_graded_rag.embeddings import model_key
 from regulator_graded_rag.gold import Item, gold_version, load_items
@@ -62,6 +73,7 @@ from regulator_graded_rag.models import (
     WeightsMissing,
 )
 from regulator_graded_rag.pipeline import build
+from regulator_graded_rag.tuning import assign_folds, choose
 
 RUNS = Path("eval/runs")
 GOLD = {
@@ -291,10 +303,12 @@ def run_retrieval(
     *,
     clock: Callable[[], float] = time.perf_counter,
     progress: Callable[[int, int, str], None] | None = None,
+    pick: Callable[[Item], Retriever] | None = None,
 ) -> dict[str, object]:
     """Search every item not yet saved in the folder, saving each as it finishes, and
     return the complete run file. progress hears each question's number, the number of
-    items and its ID before it is searched."""
+    items and its ID before it is searched. pick, when given, names the retriever that
+    searches each item, as a tuned run's folds do."""
     run_file = folder / "run.json"
     run: dict[str, Any]
     if run_file.exists():
@@ -323,11 +337,12 @@ def run_retrieval(
                 continue
             if progress is not None:
                 progress(number, len(items), item.id)
+            searcher = retriever if pick is None else pick(item)
             start = clock()
-            hits = retriever.search(item.question, DEPTH)
+            hits = searcher.search(item.question, DEPTH)
             took = clock() - start
-            if isinstance(retriever, Timed):
-                took = retriever.compute_seconds()
+            if isinstance(searcher, Timed):
+                took = searcher.compute_seconds()
             line = {
                 "id": item.id,
                 "type": item.type,
@@ -349,6 +364,65 @@ def run_retrieval(
     }
     _write_json(run_file, run)
     return run
+
+
+def _grid(config: Config) -> tuple[float, ...]:
+    """The tuned setting's values, in the config's order."""
+    if config.tuned == "depth" and config.rerank is not None:
+        return tuple(float(depth) for depth in config.rerank.depths)
+    if config.fusion is None:
+        raise ConfigError(f"{config.path} has no grid to tune")
+    return config.fusion.values
+
+
+def run_tuned(
+    config: Config,
+    retrievers: Mapping[float, Retriever],
+    items: Sequence[Item],
+    folder: Path,
+    head: dict[str, object],
+    *,
+    progress: Callable[[int, int, str], None] | None = None,
+) -> dict[str, object]:
+    """A tuned config's run (ADR-0024): every grid value's retriever, in grid order,
+    searches and scores every answerable item; each fold gets the value chosen on the
+    other folds; and every item, unanswerable ones included, is searched by its fold's
+    value. The run file adds the tuning: the setting, the grid, the seed, each fold's
+    value and the value chosen on all of dev."""
+    if config.tuned is None or config.cv is None:
+        raise ConfigError(f"{config.path} has no grid to tune")
+    if head.get("split") != "dev":
+        raise ConfigError(
+            f"{config.name} tunes {config.tuned}: tuning never touches the held-out"
+            " split; run the config fixed at the value chosen on dev (ADR-0014)"
+        )
+    answerable = [item for item in items if item.answerable]
+    scores: dict[float, dict[str, float]] = {}
+    for value, retriever in retrievers.items():
+        scores[value] = {}
+        for number, item in enumerate(answerable, start=1):
+            if progress is not None:
+                progress(number, len(answerable), f"{config.tuned}={value:g} {item.id}")
+            hits = retriever.search(item.question, DEPTH)
+            ranked = [hit.passage_id for hit in hits]
+            scores[value][item.id] = score_question(item, ranked).recall[10]
+    fold_of = assign_folds(items, config.cv.seed, config.cv.folds)
+    chosen, all_dev = choose(scores, fold_of, config.cv.folds)
+    tuning = {
+        "setting": config.tuned,
+        "grid": list(retrievers),
+        "seed": config.cv.seed,
+        "folds": {str(fold): value for fold, value in chosen.items()},
+        "all_dev": all_dev,
+    }
+    return run_retrieval(
+        retrievers[all_dev],
+        items,
+        folder,
+        {**head, "tuning": tuning},
+        progress=progress,
+        pick=lambda item: retrievers[chosen[fold_of[item.id]]],
+    )
 
 
 def score_run(folder: Path, items: Sequence[Item], version: str) -> list[Summary]:
@@ -468,6 +542,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         except (OSError, ValueError) as err:
             print(err)
             return 1
+        if config.tuned is not None and args.resume:
+            # Its folds' values come from scores over every item, which a part-run
+            # would not have: a tuned run starts again, its stages answered by the cache.
+            print(
+                f"{config.name} tunes {config.tuned}: a stopped tuned run starts again"
+            )
+            return 1
     try:
         manifest = load_manifest(DEFAULT_MANIFEST)
         url = database_url()
@@ -477,6 +558,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     corpus_version = str(manifest.version)
     with connect(url) as conn:
         retriever: Retriever
+        grid: dict[float, Retriever] = {}
         try:
             if config is None:
                 k1 = K1 if args.k1 is None else args.k1
@@ -491,13 +573,22 @@ def main(argv: Sequence[str] | None = None) -> int:
                     for stage in config.first
                     if isinstance(stage, DenseStage)
                 }
-                retriever = build(
-                    config,
-                    conn,
-                    corpus_version=corpus_version,
-                    cache=cache,
-                    encoders=encoders,
-                )
+
+                def built(fixed_config: Config) -> Retriever:
+                    return build(
+                        fixed_config,
+                        conn,
+                        corpus_version=corpus_version,
+                        cache=cache,
+                        encoders=encoders,
+                    )
+
+                if config.tuned is None:
+                    retriever = built(config)
+                else:
+                    for value in _grid(config):
+                        grid[value] = built(fixed(config, value))
+                    retriever = grid[_grid(config)[0]]
         except ImportError:
             print('the models group is not installed: run "uv sync --group models"')
             return 1
@@ -528,8 +619,11 @@ def main(argv: Sequence[str] | None = None) -> int:
 
         print(f"run {folder.as_posix()}")
         try:
-            run_retrieval(retriever, items, folder, head, progress=show)
-        except (RunExists, ResumeMismatch) as err:
+            if config is not None and config.tuned is not None:
+                run_tuned(config, grid, items, folder, head, progress=show)
+            else:
+                run_retrieval(retriever, items, folder, head, progress=show)
+        except (RunExists, ResumeMismatch, ConfigError) as err:
             print(err)
             return 1
     print(_table(score_run(folder, items, gold_version(gold))))
