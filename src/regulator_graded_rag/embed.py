@@ -11,8 +11,8 @@ For each dense first stage of the config, the vectors file indexes/vectors/<mode
 key>.f32 is computed when it is missing, from the index's passages in ordinal order, with
 a progress counter, and its header records how many passages hold more tokens than the
 model reads. The file is then loaded into pgvector, which refuses one that does not
-match. A file made with another max_length is never reused, since the file is named by
-model and revision alone.
+match. A file made with another max_length or dtype is never reused, since the file is
+named by model and revision alone.
 Exit code 0 when every dense stage's vectors are loaded, 1 when they cannot be.
 """
 

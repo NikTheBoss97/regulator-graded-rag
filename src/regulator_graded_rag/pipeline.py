@@ -15,8 +15,10 @@ A key never outlives the code or the data that filled it. The gold set is not pa
 key, since a stage sees only the question's text, which keys each entry. Each entry keeps
 the seconds its stage took, and compute_seconds() reports them for the last search, so a
 run answered from the cache still records what each answer cost. This version runs a
-single first stage, BM25 or dense, and settings() names a dense stage's vectors by their
-SHA-256; fusion and reranking come with their experiments.
+single first stage, BM25 or dense, and settings() names what a dense stage's answers
+depend on beyond its config (RECORDED): its vectors' SHA-256, dtype and count of cut
+passages, and the device, torch and CUDA it ran on. Fusion and reranking come with
+their experiments.
 """
 
 import hashlib

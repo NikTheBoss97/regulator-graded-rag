@@ -97,8 +97,8 @@ class Dense:
     def identity(self) -> Mapping[str, object]:
         """What a search reads besides its settings: the vectors, by their SHA-256, with
         the precision they were made in and the count of passages cut to the input
-        length; the server and pgvector release that compute the distances; and the GPU
-        and torch's and CUDA's versions that embed the question."""
+        length; the server and pgvector release that compute the distances; and the
+        device, and torch's and CUDA's versions, that embed the question."""
         return self._identity
 
     def search(self, question: str, k: int) -> list[Hit]:
