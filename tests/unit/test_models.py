@@ -24,10 +24,12 @@ def stub_libraries(
     *,
     cached: bool = True,
     loaded: str = "torch.float32",
+    device: str = "cuda",
 ) -> list[tuple[object, ...]]:
-    """Stand-ins for huggingface_hub and sentence_transformers that record each call,
-    so the loader's arguments are checked without the models group. The model reports
-    the precision it loaded in as `loaded`, as torch names it."""
+    """Stand-ins for huggingface_hub, sentence_transformers and torch that record each
+    call, so the loader's arguments are checked without the models group. The model
+    reports the precision it loaded in as `loaded`, as torch names it, and runs on a
+    device of type `device`."""
     calls: list[tuple[object, ...]] = []
     path = tmp_path / "model.safetensors"
     path.write_bytes(WEIGHTS)
@@ -48,6 +50,7 @@ def stub_libraries(
             calls.append(("load", name, kwargs))
             self.max_seq_length = 0
             self.dtype = loaded
+            self.device = types.SimpleNamespace(type=device)
 
         def get_embedding_dimension(self) -> int:
             return 3
@@ -58,8 +61,15 @@ def stub_libraries(
     )
     library = types.ModuleType("sentence_transformers")
     vars(library).update(SentenceTransformer=SentenceTransformer)
+    torch = types.ModuleType("torch")
+    vars(torch).update(
+        __version__="2.14.1",
+        version=types.SimpleNamespace(cuda="12.6"),
+        cuda=types.SimpleNamespace(get_device_name=lambda device: "A GPU"),
+    )
     monkeypatch.setitem(sys.modules, "huggingface_hub", hub)
     monkeypatch.setitem(sys.modules, "sentence_transformers", library)
+    monkeypatch.setitem(sys.modules, "torch", torch)
     return calls
 
 
@@ -100,6 +110,18 @@ def test_a_model_loaded_at_another_precision_is_refused(
     # A model asked for in 16 bits and loaded in them is the config's.
     stub_libraries(monkeypatch, tmp_path, loaded="torch.bfloat16")
     SentenceTransformerEncoder(replace(stage(PINNED), dtype="bfloat16"))
+
+
+def test_the_record_names_the_device_a_model_runs_on(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    stub_libraries(monkeypatch, tmp_path, device="cuda")
+    encoder = SentenceTransformerEncoder(stage(PINNED))
+    assert encoder.runtime() == {"gpu": "A GPU", "torch": "2.14.1", "cuda": "12.6"}
+    # Apple's GPU is not a CUDA device, but a run on it is not a CPU run either: the
+    # run record and the stage's cache key must tell the two apart.
+    stub_libraries(monkeypatch, tmp_path, device="mps")
+    assert SentenceTransformerEncoder(stage(PINNED)).runtime()["gpu"] == "mps"
 
 
 def test_weights_with_another_checksum_are_never_loaded(

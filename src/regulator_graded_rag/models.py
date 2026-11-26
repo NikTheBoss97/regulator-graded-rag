@@ -99,11 +99,14 @@ class SentenceTransformerEncoder:
         self.dim = int(self._model.get_embedding_dimension())
 
     def runtime(self) -> dict[str, str]:
-        """The GPU, or "cpu", and torch's and CUDA's versions the model runs on."""
+        """The device the model runs on, by name for a CUDA GPU and by type otherwise
+        ("mps" for Apple's GPU, "cpu"), and torch's and CUDA's versions."""
         import torch
 
         device = self._model.device
-        gpu = torch.cuda.get_device_name(device) if device.type == "cuda" else "cpu"
+        gpu = (
+            torch.cuda.get_device_name(device) if device.type == "cuda" else device.type
+        )
         return {
             "gpu": str(gpu),
             "torch": str(torch.__version__),
