@@ -9,7 +9,10 @@ first list's order, then the second's passages that the first did not hold.
   counted from 1.
 - weighted: alpha times the dense list's score plus 1 - alpha times BM25's, each
   min-max normalized over its own list for the question. A passage missing from a list
-  scores 0 there, and so does every passage of a list whose scores are all equal.
+  scores 0 there, and so does every passage of a list whose scores are all equal. A
+  list's lowest passage also scores 0, so it ties with the passages the list lacks: with
+  alpha 0 the ties keep BM25's order and give exactly its ranking, while with alpha 1
+  they put BM25's passages before the dense list's lowest ones.
 """
 
 import math
